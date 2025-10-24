@@ -48,23 +48,25 @@ class ResourceCreate(BaseModel):
                 "school_id": None,
                 "type": "video",
                 "status": "published",
-                "title": "Understanding Anxiety in Teens",
-                "description": "A comprehensive guide to recognizing and managing anxiety in adolescents. This video covers common symptoms, coping strategies, and when to seek professional help.",
-                "video_url": "https://example.com/videos/anxiety-teens.mp4",
+                "title": "Understanding Anxiety in Teens: Recognition and Management",
+                "description": "A comprehensive 20-minute guide to recognizing and managing anxiety in adolescents. This evidence-based video covers common anxiety symptoms in teenagers, the difference between normal worry and clinical anxiety, practical coping strategies including breathing exercises and cognitive techniques, and guidance on when to seek professional help. Features interviews with mental health professionals and real stories from teens who have successfully managed their anxiety.",
+                "video_url": "https://resources.mentalhealthfoundation.org/videos/teen-anxiety-guide.mp4",
                 "audio_url": None,
                 "article_url": None,
-                "thumbnail_url": "https://example.com/thumbnails/anxiety-teens.jpg",
-                "author_name": "Dr. Sarah Johnson",
+                "thumbnail_url": "https://resources.mentalhealthfoundation.org/thumbnails/teen-anxiety-guide.jpg",
+                "author_name": "Dr. Sarah Johnson, Clinical Psychologist",
                 "author_id": None,
                 "posted_date": "2024-10-15T10:00:00Z",
                 "duration_seconds": 1200,
-                "tags": ["anxiety", "mental-health", "teens", "coping-strategies"],
+                "tags": ["anxiety", "mental-health", "teens", "coping-strategies", "adolescent-health", "stress-management"],
                 "category": "Mental Health Education",
-                "target_audience": ["students", "parents", "teachers"],
+                "target_audience": ["students", "parents", "teachers", "counsellors"],
                 "additional_metadata": {
                     "language": "English",
                     "reading_level": "High School",
-                    "source": "Mental Health Foundation"
+                    "format": "MP4, 1080p",
+                    "source": "Mental Health Foundation",
+                    "license": "Creative Commons BY-NC-SA 4.0"
                 }
             }
         }

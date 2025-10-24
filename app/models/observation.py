@@ -17,7 +17,7 @@ class Observation(Base):
     
     observation_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     student_id = Column(UUID(as_uuid=True), ForeignKey("students.student_id"), nullable=False)
-    reported_by = Column(UUID(as_uuid=True), nullable=False)
+    reported_by = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
     severity = Column(SQLEnum(Severity), nullable=False)
     category = Column(String, nullable=True)
     content = Column(Text, nullable=True)  # Text content (optional, but one of content/audio_url required)
@@ -25,6 +25,7 @@ class Observation(Base):
     ai_summary = Column(Text, nullable=True)  # AI-generated summary of observation
     processed = Column(Boolean, default=False, nullable=False)  # Whether observation has been reviewed/processed
     timestamp = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relationships
     student = relationship("Student", back_populates="observations")
+    reporter = relationship("User", foreign_keys=[reported_by], back_populates="observations_reported")

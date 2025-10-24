@@ -36,20 +36,24 @@ class ClassCreate(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "school_id": "123e4567-e89b-12d3-a456-426614174000",
-                "name": "Algebra II - Section A",
-                "grade": "10",
+                "school_id": "614077c0-9cde-4955-a384-5a0d0a1a1ef5",
+                "name": "Grade 8-A",
+                "grade": "8",
                 "section": "A",
                 "academic_year": "2024-2025",
-                "teacher_id": "123e4567-e89b-12d3-a456-426614174015",
-                "capacity": 30,
+                "teacher_id": "abc12345-e89b-12d3-a456-426614174055",
+                "capacity": 32,
                 "additional_info": {
                     "room_number": "B-204",
                     "schedule": {
-                        "Monday": "09:00-10:30",
-                        "Wednesday": "09:00-10:30"
+                        "Monday": "08:00-14:30",
+                        "Tuesday": "08:00-14:30",
+                        "Wednesday": "08:00-14:30",
+                        "Thursday": "08:00-14:30",
+                        "Friday": "08:00-13:00"
                     },
-                    "subjects": ["Mathematics", "Algebra II"]
+                    "subjects": ["Mathematics", "English", "Science", "Social Studies"],
+                    "notes": "Homeroom class for Grade 8 students"
                 }
             }
         }
@@ -85,13 +89,13 @@ class ClassResponse(BaseModel):
         from_attributes = True
         json_schema_extra = {
             "example": {
-                "class_id": "123e4567-e89b-12d3-a456-426614174001",
-                "school_id": "123e4567-e89b-12d3-a456-426614174000",
-                "name": "Algebra II - Section A",
-                "grade": "10",
+                "class_id": "8f3c4567-e89b-12d3-a456-426614174033",
+                "school_id": "614077c0-9cde-4955-a384-5a0d0a1a1ef5",
+                "name": "Grade 8-A",
+                "grade": "8",
                 "section": "A",
                 "academic_year": "2024-2025",
-                "teacher_id": "123e4567-e89b-12d3-a456-426614174015",
-                "capacity": 30
+                "teacher_id": "abc12345-e89b-12d3-a456-426614174055",
+                "capacity": 32
             }
         }

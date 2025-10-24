@@ -162,6 +162,84 @@ class UserCreate(UserBase):
     school_id: UUID
     profile: Optional[Union[TeacherProfile, CounsellorProfile, PrincipalProfile, AdminProfile, ParentProfile, dict]] = None
     availability: Optional[Union[Availability, dict]] = None
+    
+    class Config:
+        json_schema_extra = {
+            "examples": [
+                {
+                    "email": "david.chen@lincolnhs.edu",
+                    "display_name": "Dr. David Chen",
+                    "role": "counsellor",
+                    "phone": "+1-555-0123",
+                    "password": "SecurePassword123!",
+                    "school_id": "614077c0-9cde-4955-a384-5a0d0a1a1ef5",
+                    "profile": {
+                        "specializations": ["Anxiety", "Depression", "Trauma", "Academic Stress"],
+                        "qualifications": ["Licensed Clinical Social Worker", "M.A. Counseling Psychology"],
+                        "license_number": "LCSW-12345",
+                        "license_type": "LCSW",
+                        "languages": ["English", "Mandarin"],
+                        "certifications": ["CBT Certified", "DBT Trained", "Play Therapy"],
+                        "years_experience": 8,
+                        "approach": "Cognitive Behavioral Therapy with trauma-informed care",
+                        "bio": "Dedicated to supporting adolescent mental health and wellbeing"
+                    },
+                    "availability": {
+                        "blocks": [
+                            {"day": "Monday", "start_time": "08:00", "end_time": "16:00"},
+                            {"day": "Tuesday", "start_time": "08:00", "end_time": "16:00"},
+                            {"day": "Wednesday", "start_time": "08:00", "end_time": "16:00"},
+                            {"day": "Thursday", "start_time": "08:00", "end_time": "16:00"},
+                            {"day": "Friday", "start_time": "08:00", "end_time": "14:00"}
+                        ],
+                        "timezone": "America/Chicago",
+                        "notes": "Available for emergency consultations after hours by appointment"
+                    }
+                },
+                {
+                    "email": "sarah.johnson@lincolnhs.edu",
+                    "display_name": "Ms. Sarah Johnson",
+                    "role": "teacher",
+                    "phone": "+1-555-0145",
+                    "password": "TeacherPass456!",
+                    "school_id": "614077c0-9cde-4955-a384-5a0d0a1a1ef5",
+                    "profile": {
+                        "subjects": ["Mathematics", "Algebra II", "Calculus"],
+                        "qualifications": ["M.Ed Mathematics Education", "B.Sc Mathematics"],
+                        "years_experience": 12,
+                        "certifications": ["Advanced Placement Certified", "Special Education"],
+                        "grade_levels": ["9", "10", "11", "12"],
+                        "bio": "Passionate about making mathematics accessible and engaging for all students"
+                    },
+                    "availability": {
+                        "blocks": [
+                            {"day": "Monday", "start_time": "07:30", "end_time": "15:30"},
+                            {"day": "Tuesday", "start_time": "07:30", "end_time": "15:30"},
+                            {"day": "Wednesday", "start_time": "07:30", "end_time": "15:30"},
+                            {"day": "Thursday", "start_time": "07:30", "end_time": "15:30"},
+                            {"day": "Friday", "start_time": "07:30", "end_time": "15:30"}
+                        ],
+                        "timezone": "America/Chicago",
+                        "notes": "Office hours: Tuesday and Thursday 3:30-4:30 PM"
+                    }
+                },
+                {
+                    "email": "jane.doe@email.com",
+                    "display_name": "Jane Doe",
+                    "role": "parent",
+                    "phone": "+1-555-0178",
+                    "password": "ParentPass789!",
+                    "school_id": "614077c0-9cde-4955-a384-5a0d0a1a1ef5",
+                    "profile": {
+                        "preferred_contact_method": "email",
+                        "languages": ["English"],
+                        "emergency_contact": True,
+                        "relationship": "Mother",
+                        "occupation": "Software Engineer"
+                    }
+                }
+            ]
+        }
 
 class UserUpdate(BaseModel):
     display_name: Optional[str] = None
@@ -178,6 +256,39 @@ class UserResponse(UserBase):
     
     class Config:
         from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "user_id": "123e4567-e89b-12d3-a456-426614174021",
+                "email": "david.chen@lincolnhs.edu",
+                "display_name": "Dr. David Chen",
+                "role": "counsellor",
+                "phone": "+1-555-0123",
+                "school_id": "614077c0-9cde-4955-a384-5a0d0a1a1ef5",
+                "profile": {
+                    "specializations": ["Anxiety", "Depression", "Trauma", "Academic Stress"],
+                    "qualifications": ["Licensed Clinical Social Worker", "M.A. Counseling Psychology"],
+                    "license_number": "LCSW-12345",
+                    "license_type": "LCSW",
+                    "languages": ["English", "Mandarin"],
+                    "certifications": ["CBT Certified", "DBT Trained", "Play Therapy"],
+                    "years_experience": 8,
+                    "approach": "Cognitive Behavioral Therapy with trauma-informed care",
+                    "bio": "Dedicated to supporting adolescent mental health and wellbeing"
+                },
+                "availability": {
+                    "blocks": [
+                        {"day": "Monday", "start_time": "08:00", "end_time": "16:00"},
+                        {"day": "Tuesday", "start_time": "08:00", "end_time": "16:00"},
+                        {"day": "Wednesday", "start_time": "08:00", "end_time": "16:00"},
+                        {"day": "Thursday", "start_time": "08:00", "end_time": "16:00"},
+                        {"day": "Friday", "start_time": "08:00", "end_time": "14:00"}
+                    ],
+                    "timezone": "America/Chicago",
+                    "notes": "Available for emergency consultations after hours by appointment"
+                },
+                "created_at": "2024-01-15T10:30:00Z"
+            }
+        }
 
 class Token(BaseModel):
     access_token: str

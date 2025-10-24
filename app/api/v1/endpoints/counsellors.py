@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
 from app.core.database import get_db
+from app.core.response import success_response
 from app.models.user import User, UserRole
 from app.models.case import Case
 from app.models.school import School
@@ -10,7 +11,7 @@ from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
 router = APIRouter()
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_counsellor(
     counsellor_data: UserCreate,
     db: Session = Depends(get_db)
@@ -22,7 +23,7 @@ async def create_counsellor(
             status_code=400,
             detail="Role must be 'counsellor' for this endpoint"
         )
-    
+
     # Validate school exists
     school = db.query(School).filter(School.school_id == counsellor_data.school_id).first()
     if not school:
@@ -30,7 +31,7 @@ async def create_counsellor(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="School not found"
         )
-    
+
     # Check if email already exists
     existing_user = db.query(User).filter(User.email == counsellor_data.email).first()
     if existing_user:
@@ -38,13 +39,13 @@ async def create_counsellor(
             status_code=400,
             detail="Email already registered"
         )
-    
+
     from app.core.security import get_password_hash
-    
+
     # Convert Pydantic models to dict for JSON storage
     profile_dict = counsellor_data.profile.dict() if counsellor_data.profile and hasattr(counsellor_data.profile, 'dict') else counsellor_data.profile
     availability_dict = counsellor_data.availability.dict() if counsellor_data.availability and hasattr(counsellor_data.availability, 'dict') else counsellor_data.availability
-    
+
     counsellor = User(
         email=counsellor_data.email,
         display_name=counsellor_data.display_name,
@@ -55,13 +56,13 @@ async def create_counsellor(
         profile=profile_dict,
         availability=availability_dict
     )
-    
+
     db.add(counsellor)
     db.commit()
     db.refresh(counsellor)
-    return counsellor
+    return success_response(counsellor)
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("/")
 async def list_counsellors(
     school_id: UUID,  # Required parameter
     skip: int = 0,
@@ -74,17 +75,17 @@ async def list_counsellors(
         User.school_id == school_id,
         User.role == UserRole.COUNSELLOR
     )
-    
+
     # Filter by specialization if provided
     if specialization:
         query = query.filter(
             User.profile.contains({"specializations": [specialization]})
         )
-    
-    counsellors = query.offset(skip).limit(limit).all()
-    return counsellors
 
-@router.get("/{counsellor_id}", response_model=UserResponse)
+    counsellors = query.offset(skip).limit(limit).all()
+    return success_response(counsellors)
+
+@router.get("/{counsellor_id}")
 async def get_counsellor(
     counsellor_id: UUID,
     db: Session = Depends(get_db)
@@ -94,12 +95,12 @@ async def get_counsellor(
         User.user_id == counsellor_id,
         User.role == UserRole.COUNSELLOR
     ).first()
-    
+
     if not counsellor:
         raise HTTPException(status_code=404, detail="Counsellor not found")
-    return counsellor
+    return success_response(counsellor)
 
-@router.get("/{counsellor_id}/cases", response_model=List[dict])
+@router.get("/{counsellor_id}/cases")
 async def get_counsellor_cases(
     counsellor_id: UUID,
     status: Optional[str] = None,
@@ -111,21 +112,21 @@ async def get_counsellor_cases(
         User.user_id == counsellor_id,
         User.role == UserRole.COUNSELLOR
     ).first()
-    
+
     if not counsellor:
         raise HTTPException(status_code=404, detail="Counsellor not found")
-    
+
     query = db.query(Case).filter(Case.assigned_counsellor == counsellor_id)
-    
+
     if status:
         query = query.filter(Case.status == status)
-    
+
     if risk_level:
         query = query.filter(Case.risk_level == risk_level)
-    
+
     cases = query.all()
-    
-    return [
+
+    return success_response([
         {
             "case_id": str(c.case_id),
             "student_id": str(c.student_id),
@@ -136,45 +137,234 @@ async def get_counsellor_cases(
             "closed_at": c.closed_at.isoformat() if c.closed_at else None
         }
         for c in cases
-    ]
+    ])
 
-@router.get("/{counsellor_id}/caseload", response_model=dict)
-async def get_counsellor_caseload(
+@router.get("/{counsellor_id}/dashboard")
+async def get_counsellor_dashboard(
     counsellor_id: UUID,
     db: Session = Depends(get_db)
 ):
-    """Get counsellor's caseload statistics"""
+    """Get comprehensive counsellor dashboard with caseload and student assessment data"""
     counsellor = db.query(User).filter(
         User.user_id == counsellor_id,
         User.role == UserRole.COUNSELLOR
     ).first()
-    
+
     if not counsellor:
         raise HTTPException(status_code=404, detail="Counsellor not found")
-    
+
     from app.models.case import CaseStatus, RiskLevel
-    
+    from app.models.student import Student
+    from app.models.assessment import Assessment, StudentResponse, AssessmentTemplate
+    from datetime import datetime, timedelta
+
     # Get all cases
     all_cases = db.query(Case).filter(Case.assigned_counsellor == counsellor_id).all()
-    
-    # Calculate statistics
+
+    # Calculate case statistics
     total_cases = len(all_cases)
     active_cases = len([c for c in all_cases if c.status != CaseStatus.CLOSED])
     closed_cases = len([c for c in all_cases if c.status == CaseStatus.CLOSED])
-    
+
     # By risk level
     critical = len([c for c in all_cases if c.risk_level == RiskLevel.CRITICAL and c.status != CaseStatus.CLOSED])
     high = len([c for c in all_cases if c.risk_level == RiskLevel.HIGH and c.status != CaseStatus.CLOSED])
     medium = len([c for c in all_cases if c.risk_level == RiskLevel.MEDIUM and c.status != CaseStatus.CLOSED])
     low = len([c for c in all_cases if c.risk_level == RiskLevel.LOW and c.status != CaseStatus.CLOSED])
+
+    # By status
+    intake = len([c for c in all_cases if c.status == CaseStatus.INTAKE])
+    assessment_status = len([c for c in all_cases if c.status == CaseStatus.ASSESSMENT])
+    intervention = len([c for c in all_cases if c.status == CaseStatus.INTERVENTION])
+    monitoring = len([c for c in all_cases if c.status == CaseStatus.MONITORING])
+
+    # Get student IDs from cases
+    student_ids = [c.student_id for c in all_cases]
     
+    # === ASSESSMENT DATA ===
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    
+    # Get all completed assessments for these students
+    all_completed_responses = db.query(StudentResponse).filter(
+        StudentResponse.student_id.in_(student_ids),
+        StudentResponse.completed_at.isnot(None)
+    ).all() if student_ids else []
+    
+    # Calculate assessment analytics
+    assessment_scores = []
+    assessment_by_category = {}
+    student_assessment_data = {}
+    
+    for response in all_completed_responses:
+        if response.score is not None:
+            assessment_scores.append(response.score)
+        
+        # Track by student
+        if response.student_id not in student_assessment_data:
+            student_assessment_data[response.student_id] = {
+                "total_score": 0,
+                "count": 0,
+                "scores": []
+            }
+        student_assessment_data[response.student_id]["total_score"] += response.score or 0
+        student_assessment_data[response.student_id]["count"] += 1
+        student_assessment_data[response.student_id]["scores"].append(response.score)
+        
+        # Get assessment category
+        assessment = db.query(Assessment).filter(
+            Assessment.assessment_id == response.assessment_id
+        ).first()
+        if assessment and assessment.template:
+            category = assessment.template.category or "General"
+            if category not in assessment_by_category:
+                assessment_by_category[category] = {"total_score": 0, "count": 0, "scores": []}
+            if response.score is not None:
+                assessment_by_category[category]["total_score"] += response.score
+                assessment_by_category[category]["count"] += 1
+                assessment_by_category[category]["scores"].append(response.score)
+    
+    # Calculate statistics
+    avg_assessment_score = sum(assessment_scores) / len(assessment_scores) if assessment_scores else 0
+    students_assessed = len(student_assessment_data)
+    
+    # Category breakdown
+    category_breakdown = []
+    for category, data in assessment_by_category.items():
+        avg_score = data["total_score"] / data["count"] if data["count"] > 0 else 0
+        category_breakdown.append({
+            "category": category,
+            "average_score": round(avg_score, 2),
+            "total_assessments": data["count"],
+            "min_score": round(min(data["scores"]), 2) if data["scores"] else 0,
+            "max_score": round(max(data["scores"]), 2) if data["scores"] else 0
+        })
+    
+    # Students with concerning assessment scores (below average by 20%)
+    concern_threshold = avg_assessment_score * 0.8 if avg_assessment_score > 0 else 0
+    students_at_risk_by_assessment = []
+    
+    for student_id, data in student_assessment_data.items():
+        avg_student_score = data["total_score"] / data["count"] if data["count"] > 0 else 0
+        if avg_student_score < concern_threshold and avg_student_score > 0:
+            student = db.query(Student).filter(Student.student_id == student_id).first()
+            case = next((c for c in all_cases if c.student_id == student_id), None)
+            
+            students_at_risk_by_assessment.append({
+                "student_id": str(student_id),
+                "student_name": f"{student.first_name} {student.last_name}" if student else "Unknown",
+                "average_score": round(avg_student_score, 2),
+                "assessments_completed": data["count"],
+                "has_active_case": case is not None and case.status != CaseStatus.CLOSED,
+                "risk_level": case.risk_level.value if case and case.status != CaseStatus.CLOSED else None
+            })
+    
+    # Detailed list of all students in caseload with assessment completion
+    students_assessment_details = []
+    for case in all_cases:
+        student = db.query(Student).filter(Student.student_id == case.student_id).first()
+        if student:
+            student_data = student_assessment_data.get(case.student_id, {"total_score": 0, "count": 0, "scores": []})
+            assessments_count = len(set(r.assessment_id for r in all_completed_responses if r.student_id == case.student_id))
+            avg_score = student_data["total_score"] / student_data["count"] if student_data["count"] > 0 else 0
+            
+            # Get last assessment date
+            student_responses = [r for r in all_completed_responses if r.student_id == case.student_id]
+            last_assessment = max(student_responses, key=lambda r: r.completed_at if r.completed_at else datetime.min) if student_responses else None
+            
+            students_assessment_details.append({
+                "student_id": str(case.student_id),
+                "student_name": f"{student.first_name} {student.last_name}",
+                "case_status": case.status.value,
+                "risk_level": case.risk_level.value,
+                "assessments_completed": assessments_count,
+                "total_responses": student_data["count"],
+                "average_score": round(avg_score, 2) if avg_score > 0 else None,
+                "last_assessment_date": last_assessment.completed_at.isoformat() if last_assessment and last_assessment.completed_at else None,
+                "has_assessments": assessments_count > 0
+            })
+    
+    # Sort by assessments completed (descending)
+    students_assessment_details.sort(key=lambda x: x["assessments_completed"], reverse=True)
+    
+    # Count students without assessments
+    students_without_assessments = len([s for s in students_assessment_details if not s["has_assessments"]])
+    
+    # Recent assessments for these students (distinct by assessment)
+    recent_assessments_count = db.query(StudentResponse).filter(
+        StudentResponse.student_id.in_(student_ids),
+        StudentResponse.completed_at >= thirty_days_ago
+    ).distinct(StudentResponse.assessment_id).count() if student_ids else 0
+
+    return success_response({
+        "counsellor_id": str(counsellor_id),
+        "counsellor_name": counsellor.display_name,
+        "caseload": {
+            "total_cases": total_cases,
+            "active_cases": active_cases,
+            "closed_cases": closed_cases,
+            "by_risk_level": {
+                "critical": critical,
+                "high": high,
+                "medium": medium,
+                "low": low
+            },
+            "by_status": {
+                "intake": intake,
+                "assessment": assessment_status,
+                "intervention": intervention,
+                "monitoring": monitoring,
+                "closed": closed_cases
+            }
+        },
+        "assessment_analytics": {
+            "total_students_assessed": students_assessed,
+            "students_without_assessments": students_without_assessments,
+            "total_assessments_completed": len(all_completed_responses),
+            "recent_assessments_30_days": recent_assessments_count,
+            "average_assessment_score": round(avg_assessment_score, 2),
+            "by_category": category_breakdown,
+            "students_at_risk_by_assessment": students_at_risk_by_assessment[:10],  # Top 10
+            "student_assessment_details": students_assessment_details
+        }
+    })
+
+@router.get("/{counsellor_id}/caseload")
+async def get_counsellor_caseload(
+    counsellor_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """Get counsellor's caseload statistics (legacy endpoint - use /dashboard instead)"""
+    counsellor = db.query(User).filter(
+        User.user_id == counsellor_id,
+        User.role == UserRole.COUNSELLOR
+    ).first()
+
+    if not counsellor:
+        raise HTTPException(status_code=404, detail="Counsellor not found")
+
+    from app.models.case import CaseStatus, RiskLevel
+
+    # Get all cases
+    all_cases = db.query(Case).filter(Case.assigned_counsellor == counsellor_id).all()
+
+    # Calculate statistics
+    total_cases = len(all_cases)
+    active_cases = len([c for c in all_cases if c.status != CaseStatus.CLOSED])
+    closed_cases = len([c for c in all_cases if c.status == CaseStatus.CLOSED])
+
+    # By risk level
+    critical = len([c for c in all_cases if c.risk_level == RiskLevel.CRITICAL and c.status != CaseStatus.CLOSED])
+    high = len([c for c in all_cases if c.risk_level == RiskLevel.HIGH and c.status != CaseStatus.CLOSED])
+    medium = len([c for c in all_cases if c.risk_level == RiskLevel.MEDIUM and c.status != CaseStatus.CLOSED])
+    low = len([c for c in all_cases if c.risk_level == RiskLevel.LOW and c.status != CaseStatus.CLOSED])
+
     # By status
     intake = len([c for c in all_cases if c.status == CaseStatus.INTAKE])
     assessment = len([c for c in all_cases if c.status == CaseStatus.ASSESSMENT])
     intervention = len([c for c in all_cases if c.status == CaseStatus.INTERVENTION])
     monitoring = len([c for c in all_cases if c.status == CaseStatus.MONITORING])
-    
-    return {
+
+    return success_response({
         "counsellor_id": str(counsellor_id),
         "counsellor_name": counsellor.display_name,
         "total_cases": total_cases,
@@ -193,9 +383,9 @@ async def get_counsellor_caseload(
             "monitoring": monitoring,
             "closed": closed_cases
         }
-    }
+    })
 
-@router.patch("/{counsellor_id}", response_model=UserResponse)
+@router.patch("/{counsellor_id}")
 async def update_counsellor(
     counsellor_id: UUID,
     counsellor_update: UserUpdate,
@@ -206,27 +396,27 @@ async def update_counsellor(
         User.user_id == counsellor_id,
         User.role == UserRole.COUNSELLOR
     ).first()
-    
+
     if not counsellor:
         raise HTTPException(status_code=404, detail="Counsellor not found")
-    
+
     update_data = counsellor_update.dict(exclude_unset=True)
-    
+
     # Convert Pydantic models to dict for JSON storage
     if 'profile' in update_data and update_data['profile'] is not None:
         if hasattr(update_data['profile'], 'dict'):
             update_data['profile'] = update_data['profile'].dict()
-    
+
     if 'availability' in update_data and update_data['availability'] is not None:
         if hasattr(update_data['availability'], 'dict'):
             update_data['availability'] = update_data['availability'].dict()
-    
+
     for field, value in update_data.items():
         setattr(counsellor, field, value)
-    
+
     db.commit()
     db.refresh(counsellor)
-    return counsellor
+    return success_response(counsellor)
 
 @router.delete("/{counsellor_id}")
 async def delete_counsellor(
@@ -238,10 +428,10 @@ async def delete_counsellor(
         User.user_id == counsellor_id,
         User.role == UserRole.COUNSELLOR
     ).first()
-    
+
     if not counsellor:
         raise HTTPException(status_code=404, detail="Counsellor not found")
-    
+
     # Check if counsellor has assigned cases
     cases = db.query(Case).filter(Case.assigned_counsellor == counsellor_id).count()
     if cases > 0:
@@ -249,7 +439,7 @@ async def delete_counsellor(
             status_code=400,
             detail=f"Cannot delete counsellor. They have {cases} assigned case(s). Please reassign cases first."
         )
-    
+
     db.delete(counsellor)
     db.commit()
-    return {"success": True, "message": "Counsellor deleted successfully", "counsellor_id": str(counsellor_id)}
+    return success_response({"message": "Counsellor deleted successfully", "counsellor_id": str(counsellor_id)})

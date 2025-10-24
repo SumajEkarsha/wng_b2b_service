@@ -22,6 +22,7 @@ class Student(Base):
     dob = Column(Date, nullable=True)
     gender = Column(SQLEnum(Gender), nullable=True)
     class_id = Column(UUID(as_uuid=True), ForeignKey("classes.class_id"), nullable=True)
+    parents_id = Column(JSON, nullable=True)  # Array of parent UUIDs
     parent_email = Column(String, nullable=True)
     parent_phone = Column(String, nullable=True)
     additional_info = Column(JSON, nullable=True)  # Renamed from metadata to avoid SQLAlchemy conflict
@@ -30,5 +31,4 @@ class Student(Base):
     school = relationship("School", back_populates="students")
     class_obj = relationship("Class", back_populates="students")
     cases = relationship("Case", back_populates="student")
-    assessments = relationship("Assessment", back_populates="student")
     observations = relationship("Observation", back_populates="student")

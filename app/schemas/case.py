@@ -3,6 +3,7 @@ from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
 from app.models.case import CaseStatus, RiskLevel, EntryVisibility, EntryType
+from app.models.student import Gender
 
 class CaseCreate(BaseModel):
     student_id: UUID = Field(..., description="ID of the student this case is for")
@@ -13,9 +14,9 @@ class CaseCreate(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "student_id": "123e4567-e89b-12d3-a456-426614174003",
-                "created_by": "123e4567-e89b-12d3-a456-426614174010",
-                "presenting_concerns": "Student showing signs of anxiety and social withdrawal. Teacher reports decreased participation in class.",
+                "student_id": "123e4567-e89b-12d3-a456-426614174007",
+                "created_by": "123e4567-e89b-12d3-a456-426614174021",
+                "presenting_concerns": "Student showing signs of anxiety and social withdrawal over the past 2 weeks. Teacher reports decreased participation in class, avoiding group activities, and appearing withdrawn. Parent contacted school expressing concerns about changes in mood at home. Recent assessment scores indicate elevated depression symptoms (PHQ-9: 11).",
                 "initial_risk": "medium"
             }
         }
@@ -53,17 +54,117 @@ class CaseResponse(BaseModel):
         from_attributes = True
         json_schema_extra = {
             "example": {
-                "case_id": "123e4567-e89b-12d3-a456-426614174030",
-                "student_id": "123e4567-e89b-12d3-a456-426614174003",
-                "created_by": "123e4567-e89b-12d3-a456-426614174010",
+                "case_id": "def45678-e89b-12d3-a456-426614174092",
+                "student_id": "123e4567-e89b-12d3-a456-426614174007",
+                "created_by": "123e4567-e89b-12d3-a456-426614174021",
                 "status": "intervention",
                 "risk_level": "medium",
-                "tags": ["anxiety", "social-withdrawal"],
-                "assigned_counsellor": "123e4567-e89b-12d3-a456-426614174020",
-                "ai_summary": "Student experiencing moderate anxiety related to academic performance and peer relationships.",
-                "processed": False,
-                "created_at": "2024-10-20T10:30:00Z",
+                "tags": ["anxiety", "social-withdrawal", "academic-stress", "depression"],
+                "assigned_counsellor": "123e4567-e89b-12d3-a456-426614174021",
+                "ai_summary": "15-year-old male student presenting with moderate depression and anxiety symptoms. Recent PHQ-9 score of 11 indicates moderate depression. Teacher observations note social withdrawal and decreased classroom participation over 2-week period. Parent reports similar behavioral changes at home. Academic performance declining. Recommended interventions: weekly counseling sessions, CBT-focused treatment, monitor for escalation, parent involvement.",
+                "processed": True,
+                "created_at": "2024-10-18T10:30:00Z",
                 "closed_at": None
+            }
+        }
+
+class StudentInfo(BaseModel):
+    student_id: UUID
+    first_name: str
+    last_name: str
+    gender: Optional[Gender] = None
+    class_id: Optional[UUID] = None
+    class_name: Optional[str] = None
+    parents_id: Optional[List[UUID]] = None
+
+    class Config:
+        from_attributes = True
+
+class ParentInfo(BaseModel):
+    user_id: UUID
+    display_name: str
+    email: str
+    phone: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class TeacherInfo(BaseModel):
+    user_id: UUID
+    display_name: str
+    email: str
+    phone: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class CounsellorInfo(BaseModel):
+    user_id: UUID
+    display_name: str
+    email: str
+    phone: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class CaseDetailResponse(BaseModel):
+    case: CaseResponse
+    student: StudentInfo
+    teacher: Optional[TeacherInfo] = None
+    counsellor: Optional[CounsellorInfo] = None
+    parents: List[ParentInfo] = []
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "case": {
+                    "case_id": "def45678-e89b-12d3-a456-426614174092",
+                    "student_id": "123e4567-e89b-12d3-a456-426614174007",
+                    "created_by": "123e4567-e89b-12d3-a456-426614174021",
+                    "status": "intervention",
+                    "risk_level": "medium",
+                    "tags": ["anxiety", "social-withdrawal", "academic-stress", "depression"],
+                    "assigned_counsellor": "123e4567-e89b-12d3-a456-426614174021",
+                    "ai_summary": "15-year-old male student presenting with moderate depression and anxiety symptoms. Recent PHQ-9 score of 11 indicates moderate depression.",
+                    "processed": True,
+                    "created_at": "2024-10-18T10:30:00Z",
+                    "closed_at": None
+                },
+                "student": {
+                    "student_id": "123e4567-e89b-12d3-a456-426614174007",
+                    "first_name": "Ethan",
+                    "last_name": "Lopez",
+                    "gender": "male",
+                    "class_id": "8f3c4567-e89b-12d3-a456-426614174033",
+                    "class_name": "Grade 8-A",
+                    "parents_id": ["9a2b3c4d-e89b-12d3-a456-426614174045", "9a2b3c4d-e89b-12d3-a456-426614174046"]
+                },
+                "teacher": {
+                    "user_id": "abc12345-e89b-12d3-a456-426614174055",
+                    "display_name": "Ms. Sarah Johnson",
+                    "email": "sarah.johnson@lincolnhs.edu",
+                    "phone": "+1-555-0145"
+                },
+                "counsellor": {
+                    "user_id": "123e4567-e89b-12d3-a456-426614174021",
+                    "display_name": "Dr. David Chen",
+                    "email": "david.chen@lincolnhs.edu",
+                    "phone": "+1-555-0123"
+                },
+                "parents": [
+                    {
+                        "user_id": "9a2b3c4d-e89b-12d3-a456-426614174045",
+                        "display_name": "Maria Lopez",
+                        "email": "maria.lopez@email.com",
+                        "phone": "+1-555-0189"
+                    },
+                    {
+                        "user_id": "9a2b3c4d-e89b-12d3-a456-426614174046",
+                        "display_name": "Carlos Lopez",
+                        "email": "carlos.lopez@email.com",
+                        "phone": "+1-555-0190"
+                    }
+                ]
             }
         }
 
@@ -84,11 +185,11 @@ class JournalEntryCreate(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "case_id": "123e4567-e89b-12d3-a456-426614174030",
-                "author_id": "123e4567-e89b-12d3-a456-426614174020",
+                "case_id": "def45678-e89b-12d3-a456-426614174092",
+                "author_id": "123e4567-e89b-12d3-a456-426614174021",
                 "visibility": "shared",
                 "type": "session_note",
-                "content": "Met with student for 45-minute session. Discussed coping strategies for test anxiety. Student was receptive and engaged. Assigned breathing exercises homework.",
+                "content": "Session 3 - 45 minutes. Student opened up more about academic pressures and social concerns. Discussed cognitive restructuring techniques for negative thought patterns. Practiced deep breathing exercises. Student reported trying homework from last session and found it somewhat helpful. Assigned: Continue daily mood journaling and practice breathing exercises when feeling overwhelmed. Progress noted in student's willingness to engage. Plan to involve parents in next session to discuss support strategies at home.",
                 "audio_url": None
             }
         }
@@ -97,23 +198,25 @@ class JournalEntryResponse(BaseModel):
     entry_id: UUID
     case_id: UUID
     author_id: UUID
+    author_name: str
     visibility: EntryVisibility
     type: EntryType
     content: Optional[str] = None
     audio_url: Optional[str] = None
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
         json_schema_extra = {
             "example": {
-                "entry_id": "123e4567-e89b-12d3-a456-426614174040",
-                "case_id": "123e4567-e89b-12d3-a456-426614174030",
-                "author_id": "123e4567-e89b-12d3-a456-426614174020",
+                "entry_id": "5e6f7890-e89b-12d3-a456-426614174099",
+                "case_id": "def45678-e89b-12d3-a456-426614174092",
+                "author_id": "123e4567-e89b-12d3-a456-426614174021",
+                "author_name": "Dr. David Chen",
                 "visibility": "shared",
                 "type": "session_note",
-                "content": "Met with student for 45-minute session. Progress noted in anxiety management.",
+                "content": "Session 3 - 45 minutes. Student opened up more about academic pressures and social concerns. Progress noted in student's willingness to engage and practice coping strategies.",
                 "audio_url": None,
-                "created_at": "2024-10-20T14:30:00Z"
+                "created_at": "2024-10-22T14:30:00Z"
             }
         }

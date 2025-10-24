@@ -36,3 +36,5 @@ class User(Base):
     journal_entries = relationship("JournalEntry", back_populates="author")
     classes_taught = relationship("Class", foreign_keys="Class.teacher_id", back_populates="teacher")
     resources_authored = relationship("Resource", back_populates="author")
+    observations_reported = relationship("Observation", back_populates="reporter")
+    assessments_created = relationship("Assessment", back_populates="creator")

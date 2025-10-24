@@ -5,6 +5,7 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timedelta
 from app.core.database import get_db
+from app.core.response import success_response
 from app.models.user import User, UserRole
 from app.models.student import Student
 from app.models.case import Case, CaseStatus, RiskLevel
@@ -16,7 +17,7 @@ from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
 router = APIRouter()
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/")
 async def create_school_admin(
     admin_data: UserCreate,
     db: Session = Depends(get_db)
@@ -65,9 +66,9 @@ async def create_school_admin(
     db.add(admin)
     db.commit()
     db.refresh(admin)
-    return admin
+    return success_response(admin)
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("/")
 async def list_school_admins(
     school_id: UUID,  # Required parameter
     skip: int = 0,
@@ -80,9 +81,9 @@ async def list_school_admins(
         User.role.in_([UserRole.PRINCIPAL, UserRole.ADMIN])
     ).offset(skip).limit(limit).all()
     
-    return admins
+    return success_response(admins)
 
-@router.get("/{admin_id}", response_model=UserResponse)
+@router.get("/{admin_id}")
 async def get_school_admin(
     admin_id: UUID,
     db: Session = Depends(get_db)
@@ -95,7 +96,7 @@ async def get_school_admin(
     
     if not admin:
         raise HTTPException(status_code=404, detail="School admin not found")
-    return admin
+    return success_response(admin)
 
 @router.get("/dashboard/overview")
 async def get_school_overview(
@@ -158,17 +159,167 @@ async def get_school_overview(
         Observation.timestamp >= thirty_days_ago
     ).count()
     
-    # Assessments completed (last 30 days)
-    recent_assessments = db.query(Assessment).filter(
-        Assessment.student_id.in_(student_ids),
-        Assessment.completed_at >= thirty_days_ago
-    ).count()
+    # === COMPREHENSIVE ASSESSMENT DATA ===
+    from app.models.assessment import StudentResponse, AssessmentTemplate
+    
+    # Count recent distinct assessments (last 30 days)
+    recent_assessments_count = db.query(StudentResponse).filter(
+        StudentResponse.student_id.in_(student_ids),
+        StudentResponse.completed_at >= thirty_days_ago
+    ).distinct(StudentResponse.assessment_id).count() if student_ids else 0
+    
+    # Get all completed assessment responses for school
+    all_completed_responses = db.query(StudentResponse).filter(
+        StudentResponse.student_id.in_(student_ids),
+        StudentResponse.completed_at.isnot(None)
+    ).all() if student_ids else []
+    
+    # Calculate assessment analytics
+    assessment_scores = []
+    assessment_by_category = {}
+    assessment_by_grade = {}
+    student_assessment_count = {}
+    
+    for response in all_completed_responses:
+        if response.score is not None:
+            assessment_scores.append(response.score)
+        
+        # Track by student
+        if response.student_id not in student_assessment_count:
+            student_assessment_count[response.student_id] = 0
+        student_assessment_count[response.student_id] += 1
+        
+        # Get assessment category and student grade
+        assessment = db.query(Assessment).filter(
+            Assessment.assessment_id == response.assessment_id
+        ).first()
+        
+        if assessment and assessment.template:
+            category = assessment.template.category or "General"
+            if category not in assessment_by_category:
+                assessment_by_category[category] = {"total_score": 0, "count": 0, "scores": []}
+            if response.score is not None:
+                assessment_by_category[category]["total_score"] += response.score
+                assessment_by_category[category]["count"] += 1
+                assessment_by_category[category]["scores"].append(response.score)
+        
+        # Track by grade
+        student = db.query(Student).filter(Student.student_id == response.student_id).first()
+        if student and student.class_obj:
+            grade = student.class_obj.grade
+            if grade not in assessment_by_grade:
+                assessment_by_grade[grade] = {"total_score": 0, "count": 0, "scores": []}
+            if response.score is not None:
+                assessment_by_grade[grade]["total_score"] += response.score
+                assessment_by_grade[grade]["count"] += 1
+                assessment_by_grade[grade]["scores"].append(response.score)
+    
+    # Calculate statistics
+    avg_assessment_score = sum(assessment_scores) / len(assessment_scores) if assessment_scores else 0
+    students_assessed = len(student_assessment_count)
+    assessment_completion_rate = (students_assessed / total_students * 100) if total_students > 0 else 0
+    
+    # Category breakdown
+    category_breakdown = []
+    for category, data in assessment_by_category.items():
+        avg_score = data["total_score"] / data["count"] if data["count"] > 0 else 0
+        category_breakdown.append({
+            "category": category,
+            "average_score": round(avg_score, 2),
+            "total_assessments": data["count"],
+            "min_score": round(min(data["scores"]), 2) if data["scores"] else 0,
+            "max_score": round(max(data["scores"]), 2) if data["scores"] else 0
+        })
+    
+    # Grade level breakdown
+    grade_breakdown = []
+    for grade, data in assessment_by_grade.items():
+        avg_score = data["total_score"] / data["count"] if data["count"] > 0 else 0
+        grade_breakdown.append({
+            "grade": grade,
+            "average_score": round(avg_score, 2),
+            "total_assessments": data["count"],
+            "min_score": round(min(data["scores"]), 2) if data["scores"] else 0,
+            "max_score": round(max(data["scores"]), 2) if data["scores"] else 0
+        })
+    
+    # Sort by grade
+    grade_breakdown.sort(key=lambda x: x["grade"])
+    
+    # Get all students with assessment completion details
+    all_students = db.query(Student).filter(Student.school_id == school_id).all()
+    students_with_assessments = []
+    students_without_assessments = []
+    
+    for student in all_students:
+        count = student_assessment_count.get(student.student_id, 0)
+        
+        if count > 0:
+            student_responses = [r for r in all_completed_responses if r.student_id == student.student_id]
+            total_score = sum(r.score for r in student_responses if r.score is not None)
+            avg_score = total_score / count if count > 0 else 0
+            
+            # Get last assessment date
+            last_assessment = max(student_responses, key=lambda r: r.completed_at if r.completed_at else datetime.min) if student_responses else None
+            
+            # Check if student has active case
+            case = db.query(Case).filter(
+                Case.student_id == student.student_id,
+                Case.status != CaseStatus.CLOSED
+            ).first()
+            
+            students_with_assessments.append({
+                "student_id": str(student.student_id),
+                "student_name": f"{student.first_name} {student.last_name}",
+                "grade": student.class_obj.grade if student.class_obj else None,
+                "class_name": student.class_obj.name if student.class_obj else None,
+                "assessments_completed": len(set(r.assessment_id for r in student_responses)),
+                "total_responses": count,
+                "average_score": round(avg_score, 2),
+                "last_assessment_date": last_assessment.completed_at.isoformat() if last_assessment and last_assessment.completed_at else None,
+                "has_active_case": case is not None,
+                "risk_level": case.risk_level.value if case else None
+            })
+        else:
+            students_without_assessments.append({
+                "student_id": str(student.student_id),
+                "student_name": f"{student.first_name} {student.last_name}",
+                "grade": student.class_obj.grade if student.class_obj else None,
+                "class_name": student.class_obj.name if student.class_obj else None
+            })
+    
+    # Sort by average score
+    students_with_assessments.sort(key=lambda x: x["average_score"], reverse=True)
+    top_performers = students_with_assessments[:10]
+    underperformers = [s for s in reversed(students_with_assessments[-10:]) if s["average_score"] > 0]
+    
+    # Trend analysis (compare last 30 days vs previous 30 days)
+    sixty_days_ago = datetime.utcnow() - timedelta(days=60)
+    previous_period_responses = db.query(StudentResponse).filter(
+        StudentResponse.student_id.in_(student_ids),
+        StudentResponse.completed_at >= sixty_days_ago,
+        StudentResponse.completed_at < thirty_days_ago
+    ).all() if student_ids else []
+    
+    previous_scores = [r.score for r in previous_period_responses if r.score is not None]
+    previous_avg = sum(previous_scores) / len(previous_scores) if previous_scores else 0
+    
+    recent_period_responses = db.query(StudentResponse).filter(
+        StudentResponse.student_id.in_(student_ids),
+        StudentResponse.completed_at >= thirty_days_ago
+    ).all() if student_ids else []
+    
+    recent_scores = [r.score for r in recent_period_responses if r.score is not None]
+    recent_avg = sum(recent_scores) / len(recent_scores) if recent_scores else 0
+    
+    trend = "improving" if recent_avg > previous_avg else "declining" if recent_avg < previous_avg else "stable"
+    trend_change = round(((recent_avg - previous_avg) / previous_avg * 100), 2) if previous_avg > 0 else 0
     
     # At-risk percentage
     at_risk_students = critical_cases + high_risk_cases + medium_risk_cases
     at_risk_percent = (at_risk_students / total_students * 100) if total_students > 0 else 0
     
-    return {
+    return success_response({
         "school_id": str(school_id),
         "overview": {
             "total_students": total_students,
@@ -189,11 +340,33 @@ async def get_school_overview(
             "medium": medium_risk_cases,
             "low": low_risk_cases
         },
+        "assessment_analytics": {
+            "total_assessments_completed": len(all_completed_responses),
+            "recent_assessments_30_days": recent_assessments_count,
+            "students_assessed": students_assessed,
+            "students_not_assessed": len(students_without_assessments),
+            "assessment_completion_rate": round(assessment_completion_rate, 1),
+            "average_assessment_score": round(avg_assessment_score, 2),
+            "by_category": category_breakdown,
+            "by_grade": grade_breakdown,
+            "top_performers": top_performers,
+            "underperformers": underperformers,
+            "students_with_assessments": students_with_assessments,
+            "students_without_assessments": students_without_assessments,
+            "trend_analysis": {
+                "trend": trend,
+                "change_percentage": trend_change,
+                "previous_period_avg": round(previous_avg, 2),
+                "recent_period_avg": round(recent_avg, 2),
+                "previous_period_count": len(previous_scores),
+                "recent_period_count": len(recent_scores)
+            }
+        },
         "recent_activity_30_days": {
             "observations": recent_observations,
-            "assessments_completed": recent_assessments
+            "assessments_completed": recent_assessments_count
         }
-    }
+    })
 
 @router.get("/dashboard/at-risk-students")
 async def get_at_risk_students(
@@ -242,11 +415,11 @@ async def get_at_risk_students(
             "days_open": (datetime.utcnow() - case.created_at).days
         })
     
-    return {
+    return success_response({
         "school_id": str(school_id),
         "total_at_risk": len(result),
         "students": result
-    }
+    })
 
 @router.get("/dashboard/counsellor-workload")
 async def get_counsellor_workload(
@@ -290,11 +463,11 @@ async def get_counsellor_workload(
             "availability": counsellor.availability
         })
     
-    return {
+    return success_response({
         "school_id": str(school_id),
         "total_counsellors": len(counsellors),
         "workload": workload
-    }
+    })
 
 @router.get("/dashboard/grade-level-analysis")
 async def get_grade_level_analysis(
@@ -350,10 +523,10 @@ async def get_grade_level_analysis(
         else:
             grade_data[grade]["case_rate_percent"] = 0
     
-    return {
+    return success_response({
         "school_id": str(school_id),
         "grade_levels": list(grade_data.values())
-    }
+    })
 
 @router.get("/reports/monthly-summary")
 async def get_monthly_summary(
@@ -366,6 +539,7 @@ async def get_monthly_summary(
     
     from datetime import date
     from calendar import monthrange
+    from app.models.assessment import StudentResponse
     
     # Get date range for the month
     _, last_day = monthrange(year, month)
@@ -396,14 +570,14 @@ async def get_monthly_summary(
         Observation.timestamp <= end_date
     ).count()
     
-    # Assessments completed this month
-    assessments = db.query(Assessment).filter(
-        Assessment.student_id.in_(student_ids),
-        Assessment.completed_at >= start_date,
-        Assessment.completed_at <= end_date
-    ).count()
+    # Assessments completed this month (distinct assessments)
+    assessments = db.query(StudentResponse).filter(
+        StudentResponse.student_id.in_(student_ids),
+        StudentResponse.completed_at >= start_date,
+        StudentResponse.completed_at <= end_date
+    ).distinct(StudentResponse.assessment_id).count() if student_ids else 0
     
-    return {
+    return success_response({
         "school_id": str(school_id),
         "period": f"{year}-{month:02d}",
         "summary": {
@@ -412,9 +586,9 @@ async def get_monthly_summary(
             "observations_recorded": observations,
             "assessments_completed": assessments
         }
-    }
+    })
 
-@router.patch("/{admin_id}", response_model=UserResponse)
+@router.patch("/{admin_id}")
 async def update_school_admin(
     admin_id: UUID,
     admin_update: UserUpdate,
@@ -445,7 +619,7 @@ async def update_school_admin(
     
     db.commit()
     db.refresh(admin)
-    return admin
+    return success_response(admin)
 
 @router.delete("/{admin_id}")
 async def delete_school_admin(
@@ -463,4 +637,4 @@ async def delete_school_admin(
     
     db.delete(admin)
     db.commit()
-    return {"success": True, "message": "School admin deleted successfully", "admin_id": str(admin_id)}
+    return success_response({"message": "School admin deleted successfully", "admin_id": str(admin_id)})

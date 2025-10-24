@@ -59,7 +59,20 @@ class SchoolCreate(BaseModel):
                 "academic_year": "2024-2025",
                 "settings": {
                     "enable_parent_portal": True,
-                    "enable_sso": False
+                    "enable_sso": False,
+                    "notification_preferences": {
+                        "email_notifications": True,
+                        "sms_notifications": False,
+                        "weekly_reports": True
+                    },
+                    "privacy_settings": {
+                        "share_with_district": False,
+                        "anonymize_reports": True
+                    },
+                    "custom_fields": {
+                        "district_id": "DIST-IL-045",
+                        "accreditation": "North Central Association"
+                    }
                 }
             }
         }
@@ -102,7 +115,7 @@ class SchoolResponse(BaseModel):
         from_attributes = True
         json_schema_extra = {
             "example": {
-                "school_id": "123e4567-e89b-12d3-a456-426614174000",
+                "school_id": "614077c0-9cde-4955-a384-5a0d0a1a1ef5",
                 "name": "Lincoln High School",
                 "address": "123 Education Street",
                 "city": "Springfield",

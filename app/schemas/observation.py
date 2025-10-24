@@ -21,11 +21,11 @@ class ObservationCreate(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "student_id": "123e4567-e89b-12d3-a456-426614174003",
-                "reported_by": "123e4567-e89b-12d3-a456-426614174015",
+                "student_id": "123e4567-e89b-12d3-a456-426614174007",
+                "reported_by": "abc12345-e89b-12d3-a456-426614174055",
                 "severity": "medium",
                 "category": "behavioral",
-                "content": "Student appeared withdrawn during class discussion. Did not participate when called upon and avoided eye contact. This is unusual behavior for this student.",
+                "content": "Student appeared withdrawn during class discussion today. Did not participate when called upon, avoided eye contact with peers and teacher. This is unusual behavior for Ethan, who typically is engaged and participates actively. Also noted decreased interaction during group work. Recommend follow-up with counselor.",
                 "audio_url": None
             }
         }
@@ -34,6 +34,8 @@ class ObservationResponse(BaseModel):
     observation_id: UUID
     student_id: UUID
     reported_by: UUID
+    reporter_name: str
+    reporter_role: str
     severity: Severity
     category: Optional[str] = None
     content: Optional[str] = None
@@ -41,20 +43,22 @@ class ObservationResponse(BaseModel):
     ai_summary: Optional[str] = None
     processed: bool = False
     timestamp: datetime
-    
+
     class Config:
         from_attributes = True
         json_schema_extra = {
             "example": {
-                "observation_id": "123e4567-e89b-12d3-a456-426614174050",
-                "student_id": "123e4567-e89b-12d3-a456-426614174003",
-                "reported_by": "123e4567-e89b-12d3-a456-426614174015",
+                "observation_id": "7f8e9012-e89b-12d3-a456-426614174088",
+                "student_id": "123e4567-e89b-12d3-a456-426614174007",
+                "reported_by": "abc12345-e89b-12d3-a456-426614174055",
+                "reporter_name": "Ms. Sarah Johnson",
+                "reporter_role": "teacher",
                 "severity": "medium",
                 "category": "behavioral",
-                "content": "Student appeared withdrawn during class discussion.",
+                "content": "Student appeared withdrawn during class discussion today. Did not participate when called upon, avoided eye contact with peers and teacher. This is unusual behavior for Ethan, who typically is engaged and participates actively.",
                 "audio_url": None,
-                "ai_summary": "Student showing signs of social withdrawal and reduced engagement in classroom activities.",
+                "ai_summary": "Teacher reports atypical withdrawn behavior and social disengagement. Student avoiding participation and peer interaction. Change from typical engaged behavior pattern warrants attention.",
                 "processed": False,
-                "timestamp": "2024-10-20T09:15:00Z"
+                "timestamp": "2024-10-22T09:15:00Z"
             }
         }

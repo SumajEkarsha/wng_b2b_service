@@ -7,14 +7,14 @@ import enum
 from app.core.database import Base
 
 class ResourceType(str, enum.Enum):
-    VIDEO = "video"
-    AUDIO = "audio"
-    ARTICLE = "article"
+    VIDEO = "VIDEO"
+    AUDIO = "AUDIO"
+    ARTICLE = "ARTICLE"
 
 class ResourceStatus(str, enum.Enum):
-    DRAFT = "draft"
-    PUBLISHED = "published"
-    ARCHIVED = "archived"
+    DRAFT = "DRAFT"
+    PUBLISHED = "PUBLISHED"
+    ARCHIVED = "ARCHIVED"
 
 class Resource(Base):
     __tablename__ = "resources"

@@ -7,27 +7,27 @@ import enum
 from app.core.database import Base
 
 class CaseStatus(str, enum.Enum):
-    INTAKE = "intake"
-    ASSESSMENT = "assessment"
-    INTERVENTION = "intervention"
-    MONITORING = "monitoring"
-    CLOSED = "closed"
+    INTAKE = "INTAKE"
+    ASSESSMENT = "ASSESSMENT"
+    INTERVENTION = "INTERVENTION"
+    MONITORING = "MONITORING"
+    CLOSED = "CLOSED"
 
 class RiskLevel(str, enum.Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 
 class EntryVisibility(str, enum.Enum):
-    PRIVATE = "private"
-    SHARED = "shared"
+    PRIVATE = "PRIVATE"
+    SHARED = "SHARED"
 
 class EntryType(str, enum.Enum):
-    SESSION_NOTE = "session_note"
-    OBSERVATION = "observation"
-    ASSESSMENT_RESULT = "assessment_result"
-    CONTACT_LOG = "contact_log"
+    SESSION_NOTE = "SESSION_NOTE"
+    OBSERVATION = "OBSERVATION"
+    ASSESSMENT_RESULT = "ASSESSMENT_RESULT"
+    CONTACT_LOG = "CONTACT_LOG"
 
 class Case(Base):
     __tablename__ = "cases"
@@ -48,6 +48,10 @@ class Case(Base):
     student = relationship("Student", back_populates="cases")
     creator = relationship("User", foreign_keys=[created_by], back_populates="cases_created")
     journal_entries = relationship("JournalEntry", back_populates="case")
+    session_notes = relationship("SessionNote", back_populates="case")
+    goals = relationship("Goal", back_populates="case")
+    ai_recommendations = relationship("AIRecommendation", back_populates="case")
+    calendar_events = relationship("CalendarEvent", back_populates="case")
 
 class JournalEntry(Base):
     __tablename__ = "journal_entries"

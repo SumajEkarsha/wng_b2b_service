@@ -8,16 +8,17 @@ from app.models.case import Case, JournalEntry
 from app.models.student import Student
 from app.models.user import User, UserRole
 from app.models.class_model import Class
-from app.schemas.case import CaseCreate, CaseResponse, CaseDetailResponse, JournalEntryCreate, JournalEntryResponse
+from app.schemas.case import CaseCreate, CaseUpdate, CaseResponse, CaseDetailResponse, JournalEntryCreate, JournalEntryResponse
 
 router = APIRouter()
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_case(case_data: CaseCreate, db: Session = Depends(get_db)):
     case = Case(
         student_id=case_data.student_id,
         created_by=case_data.created_by,
-        risk_level=case_data.initial_risk
+        risk_level=case_data.initial_risk,
+        ai_summary=case_data.presenting_concerns
     )
     db.add(case)
     db.commit()
@@ -109,8 +110,8 @@ async def get_case(case_id: UUID, db: Session = Depends(get_db)):
 
     return success_response(response_data)
 
-@router.get("/")
-async def list_cases(school_id: UUID = None, student_id: UUID = None, status: str = None, risk_level: str = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+@router.get("")
+async def list_cases(school_id: UUID = None, student_id: UUID = None, status: str = None, risk_level: str = None, assigned_counsellor: UUID = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     # Build base query with joined loads for efficient fetching
     query = (
         db.query(Case)
@@ -129,6 +130,8 @@ async def list_cases(school_id: UUID = None, student_id: UUID = None, status: st
         query = query.filter(Case.status == status)
     if risk_level:
         query = query.filter(Case.risk_level == risk_level)
+    if assigned_counsellor:
+        query = query.filter(Case.assigned_counsellor == assigned_counsellor)
 
     cases = query.offset(skip).limit(limit).all()
 
@@ -263,6 +266,22 @@ async def get_journal_entries(case_id: UUID, db: Session = Depends(get_db)):
         result.append(entry_data)
 
     return success_response(result)
+
+@router.patch("/{case_id}")
+async def update_case(case_id: UUID, case_update: CaseUpdate, db: Session = Depends(get_db)):
+    """Update case details"""
+    case = db.query(Case).filter(Case.case_id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    # Update fields if provided
+    update_data = case_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(case, field, value)
+
+    db.commit()
+    db.refresh(case)
+    return success_response(case)
 
 @router.post("/{case_id}/process")
 async def process_case(case_id: UUID, db: Session = Depends(get_db)):

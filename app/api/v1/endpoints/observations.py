@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from app.core.database import get_db
 from app.core.response import success_response
@@ -56,20 +56,32 @@ async def create_observation(
 
 @router.get("/")
 async def list_observations(
-    student_id: UUID,  # Required parameter
+    student_id: Optional[UUID] = None,
+    reported_by: Optional[UUID] = None,
     skip: int = 0,
     limit: int = 100,
-    severity: str = None,
+    severity: Optional[str] = None,
+    processed: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
     # Fetch observations with reporter information
     query = (
         db.query(Observation)
         .options(joinedload(Observation.reporter))
-        .filter(Observation.student_id == student_id)
     )
+    
+    # Apply filters
+    if student_id:
+        query = query.filter(Observation.student_id == student_id)
+    if reported_by:
+        query = query.filter(Observation.reported_by == reported_by)
     if severity:
         query = query.filter(Observation.severity == severity)
+    if processed is not None:
+        query = query.filter(Observation.processed == processed)
+    
+    # Order by timestamp descending (most recent first)
+    query = query.order_by(Observation.timestamp.desc())
 
     observations = query.offset(skip).limit(limit).all()
 

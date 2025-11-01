@@ -7,12 +7,12 @@ import enum
 from app.core.database import Base
 
 class UserRole(str, enum.Enum):
-    COUNSELLOR = "counsellor"
-    TEACHER = "teacher"
-    PRINCIPAL = "principal"
-    PARENT = "parent"
-    CLINICIAN = "clinician"
-    ADMIN = "admin"
+    COUNSELLOR = "COUNSELLOR"
+    TEACHER = "TEACHER"
+    PRINCIPAL = "PRINCIPAL"
+    PARENT = "PARENT"
+    CLINICIAN = "CLINICIAN"
+    ADMIN = "ADMIN"
 
 class User(Base):
     __tablename__ = "users"
@@ -38,3 +38,9 @@ class User(Base):
     resources_authored = relationship("Resource", back_populates="author")
     observations_reported = relationship("Observation", back_populates="reporter")
     assessments_created = relationship("Assessment", back_populates="creator")
+    activities_created = relationship("Activity", back_populates="creator")
+    daily_boosters_created = relationship("DailyBooster", back_populates="creator")
+    calendar_events_created = relationship("CalendarEvent", back_populates="creator")
+    session_notes = relationship("SessionNote", back_populates="counsellor")
+    risk_alerts_assigned = relationship("RiskAlert", foreign_keys="RiskAlert.assigned_to", back_populates="assigned_user")
+    ai_recommendations_reviewed = relationship("AIRecommendation", foreign_keys="AIRecommendation.reviewed_by", back_populates="reviewer")

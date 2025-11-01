@@ -11,7 +11,7 @@ from app.schemas.resource import ResourceCreate, ResourceResponse, ResourceUpdat
 
 router = APIRouter()
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_resource(resource_data: ResourceCreate, db: Session = Depends(get_db)):
     if resource_data.type == ResourceType.VIDEO and not resource_data.video_url:
         raise HTTPException(status_code=400, detail="video_url required for videos")
@@ -28,7 +28,7 @@ async def create_resource(resource_data: ResourceCreate, db: Session = Depends(g
     db.refresh(resource)
     return success_response(resource)
 
-@router.get("/")
+@router.get("")
 async def list_resources(
     skip: int = 0,
     limit: int = 100,

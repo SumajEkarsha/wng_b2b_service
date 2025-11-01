@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from uuid import UUID
 from app.core.database import get_db
@@ -53,7 +53,9 @@ async def list_classes(
     section: str = None,
     db: Session = Depends(get_db)
 ):
-    query = db.query(Class).filter(Class.school_id == school_id)
+    query = db.query(Class).options(
+        joinedload(Class.teacher)
+    ).filter(Class.school_id == school_id)
     if grade:
         query = query.filter(Class.grade == grade)
     if section:
@@ -66,7 +68,9 @@ async def get_class(
     class_id: UUID,
     db: Session = Depends(get_db)
 ):
-    class_obj = db.query(Class).filter(Class.class_id == class_id).first()
+    class_obj = db.query(Class).options(
+        joinedload(Class.teacher)
+    ).filter(Class.class_id == class_id).first()
     if not class_obj:
         raise HTTPException(status_code=404, detail="Class not found")
     return success_response(class_obj)

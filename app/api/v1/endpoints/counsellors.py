@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from uuid import UUID
 from app.core.database import get_db
@@ -184,8 +184,10 @@ async def get_counsellor_dashboard(
     # === ASSESSMENT DATA ===
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     
-    # Get all completed assessments for these students
-    all_completed_responses = db.query(StudentResponse).filter(
+    # Get all completed assessments for these students with eager loading
+    all_completed_responses = db.query(StudentResponse).options(
+        joinedload(StudentResponse.assessment).joinedload(Assessment.template)
+    ).filter(
         StudentResponse.student_id.in_(student_ids),
         StudentResponse.completed_at.isnot(None)
     ).all() if student_ids else []
@@ -210,12 +212,9 @@ async def get_counsellor_dashboard(
         student_assessment_data[response.student_id]["count"] += 1
         student_assessment_data[response.student_id]["scores"].append(response.score)
         
-        # Get assessment category
-        assessment = db.query(Assessment).filter(
-            Assessment.assessment_id == response.assessment_id
-        ).first()
-        if assessment and assessment.template:
-            category = assessment.template.category or "General"
+        # Get assessment category from eager-loaded relationship
+        if response.assessment and response.assessment.template:
+            category = response.assessment.template.category or "General"
             if category not in assessment_by_category:
                 assessment_by_category[category] = {"total_score": 0, "count": 0, "scores": []}
             if response.score is not None:
@@ -239,6 +238,12 @@ async def get_counsellor_dashboard(
             "max_score": round(max(data["scores"]), 2) if data["scores"] else 0
         })
     
+    # Pre-load all students at once
+    students_map = {}
+    if student_ids:
+        students_list = db.query(Student).filter(Student.student_id.in_(student_ids)).all()
+        students_map = {s.student_id: s for s in students_list}
+    
     # Students with concerning assessment scores (below average by 20%)
     concern_threshold = avg_assessment_score * 0.8 if avg_assessment_score > 0 else 0
     students_at_risk_by_assessment = []
@@ -246,7 +251,7 @@ async def get_counsellor_dashboard(
     for student_id, data in student_assessment_data.items():
         avg_student_score = data["total_score"] / data["count"] if data["count"] > 0 else 0
         if avg_student_score < concern_threshold and avg_student_score > 0:
-            student = db.query(Student).filter(Student.student_id == student_id).first()
+            student = students_map.get(student_id)
             case = next((c for c in all_cases if c.student_id == student_id), None)
             
             students_at_risk_by_assessment.append({
@@ -261,7 +266,7 @@ async def get_counsellor_dashboard(
     # Detailed list of all students in caseload with assessment completion
     students_assessment_details = []
     for case in all_cases:
-        student = db.query(Student).filter(Student.student_id == case.student_id).first()
+        student = students_map.get(case.student_id)
         if student:
             student_data = student_assessment_data.get(case.student_id, {"total_score": 0, "count": 0, "scores": []})
             assessments_count = len(set(r.assessment_id for r in all_completed_responses if r.student_id == case.student_id))

@@ -7,10 +7,10 @@ import enum
 from app.core.database import Base
 
 class Severity(str, enum.Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 
 class Observation(Base):
     __tablename__ = "observations"

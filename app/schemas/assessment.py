@@ -170,10 +170,13 @@ class StudentResponseData(BaseModel):
 
 # Assessment schemas
 class AssessmentCreate(BaseModel):
-    template_id: UUID = Field(..., description="ID of the assessment template to use")
+    template_id: Optional[UUID] = Field(default=None, description="ID of the assessment template to use (optional if questions provided)")
     school_id: UUID = Field(..., description="ID of the school")
     class_id: Optional[UUID] = Field(default=None, description="ID of the class (optional)")
     title: Optional[str] = Field(default=None, max_length=200, description="Optional title for this assessment")
+    description: Optional[str] = Field(default=None, description="Assessment description")
+    category: Optional[str] = Field(default=None, description="Assessment category")
+    questions: Optional[List[Question]] = Field(default=None, description="Questions for the assessment (if not using template)")
     created_by: UUID = Field(..., description="ID of the user creating the assessment")
     notes: Optional[str] = Field(default=None, description="Additional notes")
     

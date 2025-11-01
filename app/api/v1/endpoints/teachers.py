@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timedelta
@@ -169,6 +169,8 @@ async def get_teacher_dashboard(
     db: Session = Depends(get_db)
 ):
     """Get comprehensive teacher dashboard with class insights and student wellbeing"""
+    from sqlalchemy.orm import joinedload
+    
     teacher = db.query(User).filter(
         User.user_id == teacher_id,
         User.role == UserRole.TEACHER
@@ -205,8 +207,10 @@ async def get_teacher_dashboard(
         StudentResponse.completed_at >= thirty_days_ago
     ).distinct(StudentResponse.assessment_id).count() if student_ids else 0
     
-    # Get ALL completed assessment responses for students
-    all_completed_responses = db.query(StudentResponse).filter(
+    # Get ALL completed assessment responses with eager loading
+    all_completed_responses = db.query(StudentResponse).options(
+        joinedload(StudentResponse.assessment).joinedload(Assessment.template)
+    ).filter(
         StudentResponse.student_id.in_(student_ids),
         StudentResponse.completed_at.isnot(None)
     ).all() if student_ids else []
@@ -225,12 +229,9 @@ async def get_teacher_dashboard(
             student_assessment_count[response.student_id] = 0
         student_assessment_count[response.student_id] += 1
         
-        # Get assessment category
-        assessment = db.query(Assessment).filter(
-            Assessment.assessment_id == response.assessment_id
-        ).first()
-        if assessment and assessment.template:
-            category = assessment.template.category or "General"
+        # Get assessment category from eager-loaded relationship
+        if response.assessment and response.assessment.template:
+            category = response.assessment.template.category or "General"
             if category not in assessment_by_category:
                 assessment_by_category[category] = {"total_score": 0, "count": 0, "scores": []}
             if response.score is not None:
@@ -255,106 +256,34 @@ async def get_teacher_dashboard(
             "max_score": round(max(data["scores"]), 2) if data["scores"] else 0
         })
     
-    # Student assessment completion details
-    students_with_assessments = []
-    students_without_assessments = []
-    
-    for student in students:
-        student_responses = [r for r in all_completed_responses if r.student_id == student.student_id]
-        assessments_count = len(set(r.assessment_id for r in student_responses))
-        
-        if assessments_count > 0:
-            # Calculate average score for this student
-            scores = [r.score for r in student_responses if r.score is not None]
-            avg_score = sum(scores) / len(scores) if scores else 0
-            
-            # Get most recent assessment
-            recent = max(student_responses, key=lambda r: r.completed_at if r.completed_at else datetime.min)
-            
-            # Check if student has active case
-            case = db.query(Case).filter(
-                Case.student_id == student.student_id,
-                Case.status != CaseStatus.CLOSED
-            ).first()
-            
-            students_with_assessments.append({
-                "student_id": str(student.student_id),
-                "student_name": f"{student.first_name} {student.last_name}",
-                "class_id": str(student.class_id) if student.class_id else None,
-                "assessments_completed": assessments_count,
-                "total_responses": len(student_responses),
-                "average_score": round(avg_score, 2),
-                "last_assessment_date": recent.completed_at.isoformat() if recent.completed_at else None,
-                "has_active_case": case is not None,
-                "risk_level": case.risk_level.value if case else None
-            })
-        else:
-            students_without_assessments.append({
-                "student_id": str(student.student_id),
-                "student_name": f"{student.first_name} {student.last_name}",
-                "class_id": str(student.class_id) if student.class_id else None
-            })
-    
-    # Sort by number of assessments completed (descending)
-    students_with_assessments.sort(key=lambda x: x["assessments_completed"], reverse=True)
-    
-    # Recent assessments details (last 30 days)
-    recent_assessments_list = db.query(Assessment).join(
-        StudentResponse, Assessment.assessment_id == StudentResponse.assessment_id
-    ).filter(
-        StudentResponse.student_id.in_(student_ids),
-        StudentResponse.completed_at >= thirty_days_ago
-    ).distinct().limit(10).all() if student_ids else []
-    
-    recent_assessments_detail = []
-    for assessment in recent_assessments_list:
-        template = db.query(AssessmentTemplate).filter(
-            AssessmentTemplate.template_id == assessment.template_id
-        ).first()
-        
-        responses = db.query(StudentResponse).filter(
-            StudentResponse.assessment_id == assessment.assessment_id,
-            StudentResponse.student_id.in_(student_ids),
-            StudentResponse.completed_at >= thirty_days_ago
-        ).all()
-        
-        scores = [r.score for r in responses if r.score is not None]
-        avg_score = sum(scores) / len(scores) if scores else 0
-        
-        recent_assessments_detail.append({
-            "assessment_id": str(assessment.assessment_id),
-            "title": assessment.title,
-            "template_name": template.name if template else "Unknown",
-            "category": template.category if template else None,
-            "students_completed": len(set(r.student_id for r in responses)),
-            "average_score": round(avg_score, 2),
-            "created_at": assessment.created_at.isoformat() if assessment.created_at else None
-        })
+    # Count students with/without assessments (simplified)
+    students_assessed = len(student_assessment_count)
+    students_not_assessed = total_students - students_assessed
     
     # Cases and wellbeing
     active_cases = db.query(Case).filter(
         Case.student_id.in_(student_ids),
         Case.status != CaseStatus.CLOSED
-    ).count()
+    ).count() if student_ids else 0
     
     # Risk level breakdown
     critical_students = db.query(Case).filter(
         Case.student_id.in_(student_ids),
         Case.risk_level == RiskLevel.CRITICAL,
         Case.status != CaseStatus.CLOSED
-    ).count()
+    ).count() if student_ids else 0
     
     high_risk_students = db.query(Case).filter(
         Case.student_id.in_(student_ids),
         Case.risk_level == RiskLevel.HIGH,
         Case.status != CaseStatus.CLOSED
-    ).count()
+    ).count() if student_ids else 0
     
     medium_risk_students = db.query(Case).filter(
         Case.student_id.in_(student_ids),
         Case.risk_level == RiskLevel.MEDIUM,
         Case.status != CaseStatus.CLOSED
-    ).count()
+    ).count() if student_ids else 0
     
     # Calculate wellbeing percentage (students without active cases)
     students_at_risk = critical_students + high_risk_students + medium_risk_students
@@ -380,13 +309,10 @@ async def get_teacher_dashboard(
             "total_assessments_completed": len(all_completed_responses),
             "recent_assessments_30_days": recent_assessments_count,
             "students_assessed": students_assessed,
-            "students_not_assessed": len(students_without_assessments),
+            "students_not_assessed": students_not_assessed,
             "assessment_completion_rate": round(assessment_completion_rate, 1),
             "average_assessment_score": round(avg_assessment_score, 2),
-            "by_category": category_breakdown,
-            "recent_assessments": recent_assessments_detail,
-            "students_with_assessments": students_with_assessments,
-            "students_without_assessments": students_without_assessments
+            "by_category": category_breakdown
         },
         "recent_activity_30_days": {
             "observations": recent_observations,
@@ -480,25 +406,33 @@ async def get_all_classes_insights(
             "low": len([o for o in recent_observations if o.severity == Severity.LOW])
         }
         
-        # Active cases
-        active_cases = db.query(Case).filter(
+        # Batch load active cases for these students
+        active_cases_list = db.query(Case).filter(
             Case.student_id.in_(student_ids),
             Case.status != CaseStatus.CLOSED
-        ).count()
+        ).all() if student_ids else []
+        
+        # Create case lookup
+        cases_by_student = {c.student_id: c for c in active_cases_list}
+        active_cases = len(active_cases_list)
+        
+        # Batch load recent responses for these students
+        recent_responses_list = db.query(SR).filter(
+            SR.student_id.in_(student_ids),
+            SR.completed_at.isnot(None)
+        ).order_by(SR.student_id, SR.completed_at.desc()).all() if student_ids else []
+        
+        # Get most recent response per student
+        recent_responses_by_student = {}
+        for response in recent_responses_list:
+            if response.student_id not in recent_responses_by_student:
+                recent_responses_by_student[response.student_id] = response
         
         # Student details with wellbeing status
         student_details = []
         for student in students:
-            case = db.query(Case).filter(
-                Case.student_id == student.student_id,
-                Case.status != CaseStatus.CLOSED
-            ).first()
-            
-            # Get recent assessment score from StudentResponse
-            recent_response = db.query(SR).filter(
-                SR.student_id == student.student_id,
-                SR.completed_at.isnot(None)
-            ).order_by(SR.completed_at.desc()).first()
+            case = cases_by_student.get(student.student_id)
+            recent_response = recent_responses_by_student.get(student.student_id)
             
             recent_score = None
             if recent_response and recent_response.score is not None:
@@ -595,26 +529,32 @@ async def get_class_insights(
         "low": len([o for o in recent_observations if o.severity == Severity.LOW])
     }
     
-    # Active cases
-    active_cases = db.query(Case).filter(
+    # Batch load active cases
+    active_cases_list = db.query(Case).filter(
         Case.student_id.in_(student_ids),
         Case.status != CaseStatus.CLOSED
-    ).count()
+    ).all() if student_ids else []
+    
+    cases_by_student = {c.student_id: c for c in active_cases_list}
+    active_cases = len(active_cases_list)
+    
+    # Batch load recent responses
+    recent_responses_list = db.query(SR).filter(
+        SR.student_id.in_(student_ids),
+        SR.completed_at.isnot(None)
+    ).order_by(SR.student_id, SR.completed_at.desc()).all() if student_ids else []
+    
+    # Get most recent response per student
+    recent_responses_by_student = {}
+    for response in recent_responses_list:
+        if response.student_id not in recent_responses_by_student:
+            recent_responses_by_student[response.student_id] = response
     
     # Student list with wellbeing status
     student_details = []
     for student in students:
-        # Check if student has active case
-        case = db.query(Case).filter(
-            Case.student_id == student.student_id,
-            Case.status != CaseStatus.CLOSED
-        ).first()
-        
-        # Get recent assessment score from StudentResponse
-        recent_response = db.query(SR).filter(
-            SR.student_id == student.student_id,
-            SR.completed_at.isnot(None)
-        ).order_by(SR.completed_at.desc()).first()
+        case = cases_by_student.get(student.student_id)
+        recent_response = recent_responses_by_student.get(student.student_id)
         
         recent_score = None
         if recent_response and recent_response.score is not None:

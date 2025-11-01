@@ -12,6 +12,9 @@ class StudentCreate(BaseModel):
     gender: Optional[Gender] = Field(default=None, description="Student's gender")
     class_id: Optional[UUID] = Field(default=None, description="ID of the class the student is enrolled in")
     parents_id: Optional[List[UUID]] = Field(default=None, description="List of parent/guardian UUIDs")
+    parent_email: Optional[str] = Field(default=None, description="Legacy parent email for auto-creation")
+    parent_phone: Optional[str] = Field(default=None, description="Legacy parent phone")
+    parent_name: Optional[str] = Field(default=None, description="Legacy parent name for auto-creation")
     
     class Config:
         json_schema_extra = {
@@ -31,6 +34,9 @@ class StudentUpdate(BaseModel):
     last_name: Optional[str] = Field(default=None, min_length=1, max_length=100, description="Student's last name")
     class_id: Optional[UUID] = Field(default=None, description="ID of the class the student is enrolled in")
     parents_id: Optional[List[UUID]] = Field(default=None, description="List of parent/guardian UUIDs")
+    parent_email: Optional[str] = Field(default=None, description="Legacy parent email for auto-creation")
+    parent_phone: Optional[str] = Field(default=None, description="Legacy parent phone")
+    parent_name: Optional[str] = Field(default=None, description="Legacy parent name for auto-creation")
     
     class Config:
         json_schema_extra = {

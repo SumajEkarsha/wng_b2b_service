@@ -66,7 +66,8 @@ async def list_users(
     if school_id:
         query = query.filter(User.school_id == school_id)
     if role:
-        query = query.filter(User.role == role)
+        # Convert role string to uppercase to match enum values
+        query = query.filter(User.role == role.upper())
 
     users = query.offset(skip).limit(limit).all()
     return success_response(users)

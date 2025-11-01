@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Reset database - drops all tables and recreates them
-WARNING: This will delete all data!
+Script to reset the database by dropping all tables and recreating them.
 """
 import sys
 import os
@@ -9,23 +8,32 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.core.database import engine, Base
 from app.models import *
+import sqlalchemy as sa
 
 def reset_database():
-    print("⚠️  WARNING: This will delete all existing data!")
-    response = input("Are you sure you want to continue? (yes/no): ")
+    print("Dropping all tables with CASCADE...")
+    with engine.connect() as conn:
+        # Drop all tables with CASCADE
+        conn.execute(sa.text("DROP SCHEMA public CASCADE"))
+        conn.execute(sa.text("CREATE SCHEMA public"))
+        conn.execute(sa.text("GRANT ALL ON SCHEMA public TO public"))
+        conn.commit()
+    print("✅ All tables dropped")
     
-    if response.lower() != 'yes':
-        print("❌ Operation cancelled")
-        return
-    
-    print("\n🗑️  Dropping all tables...")
-    Base.metadata.drop_all(bind=engine)
-    
-    print("📋 Creating all tables...")
+    print("\nCreating all tables...")
     Base.metadata.create_all(bind=engine)
+    print("✅ All tables created")
     
-    print("✅ Database reset complete!")
-    print("\n💡 Next step: Run 'python scripts/seed_comprehensive.py' to add data")
+    print("\n" + "="*60)
+    print("DATABASE RESET COMPLETE!")
+    print("="*60)
+    print("\nYou can now run the seed script:")
+    print("  python scripts/seed_comprehensive.py")
+    print("="*60 + "\n")
 
 if __name__ == "__main__":
-    reset_database()
+    confirm = input("⚠️  This will DELETE ALL DATA. Are you sure? (yes/no): ")
+    if confirm.lower() == "yes":
+        reset_database()
+    else:
+        print("Operation cancelled.")

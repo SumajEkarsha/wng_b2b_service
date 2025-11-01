@@ -26,3 +26,6 @@ class School(Base):
     students = relationship("Student", back_populates="school")
     classes = relationship("Class", back_populates="school")
     resources = relationship("Resource", back_populates="school")
+    activities = relationship("Activity", back_populates="school")
+    daily_boosters = relationship("DailyBooster", back_populates="school")
+    calendar_events = relationship("CalendarEvent", back_populates="school")

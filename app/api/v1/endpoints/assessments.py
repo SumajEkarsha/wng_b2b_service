@@ -182,21 +182,51 @@ async def delete_template(
 
 # ============== ASSESSMENT ENDPOINTS ==============
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_assessment(
     assessment_data: AssessmentCreate,
     db: Session = Depends(get_db)
 ):
-    """Create a new assessment (can be assigned to a class or school-wide)"""
-    # Validate all required entities exist
-    get_or_404(db, AssessmentTemplate, AssessmentTemplate.template_id == assessment_data.template_id, "Template not found")
+    """Create a new assessment (can be assigned to a class or school-wide)
+    
+    Can be created in two ways:
+    1. Using an existing template (provide template_id)
+    2. With custom questions (provide questions array)
+    """
+    # Validate creator exists
     get_or_404(db, User, User.user_id == assessment_data.created_by, "Creator not found")
     
     if assessment_data.class_id:
         get_or_404(db, Class, Class.class_id == assessment_data.class_id, "Class not found")
 
+    template_id = assessment_data.template_id
+    
+    # If no template_id provided, create a template from questions
+    if not template_id and assessment_data.questions:
+        # Create a template on-the-fly
+        template = AssessmentTemplate(
+            name=assessment_data.title or "Custom Assessment",
+            description=assessment_data.description,
+            category=assessment_data.category,
+            questions=[q.dict() for q in assessment_data.questions],
+            scoring_rules={},
+            created_by=assessment_data.created_by,
+            is_active=True
+        )
+        db.add(template)
+        db.flush()  # Get the template_id without committing
+        template_id = template.template_id
+    elif not template_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either template_id or questions must be provided"
+        )
+    else:
+        # Validate template exists
+        get_or_404(db, AssessmentTemplate, AssessmentTemplate.template_id == template_id, "Template not found")
+
     assessment = Assessment(
-        template_id=assessment_data.template_id,
+        template_id=template_id,
         school_id=assessment_data.school_id,
         class_id=assessment_data.class_id,
         title=assessment_data.title,
@@ -216,6 +246,44 @@ async def create_assessment(
     )
 
     return success_response(build_assessment_list_response(assessment))
+
+@router.patch("/{assessment_id}/exclude-student/{student_id}")
+async def exclude_student_from_assessment(
+    assessment_id: UUID,
+    student_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """Exclude a specific student from a class assessment"""
+    assessment = get_or_404(db, Assessment, Assessment.assessment_id == assessment_id, "Assessment not found")
+    
+    # Initialize excluded_students if None
+    if assessment.excluded_students is None:
+        assessment.excluded_students = []
+    
+    # Add student to exclusion list if not already there
+    if student_id not in assessment.excluded_students:
+        assessment.excluded_students = assessment.excluded_students + [student_id]
+        db.commit()
+        db.refresh(assessment)
+    
+    return success_response({"message": "Student excluded from assessment", "excluded_students": assessment.excluded_students})
+
+@router.patch("/{assessment_id}/include-student/{student_id}")
+async def include_student_in_assessment(
+    assessment_id: UUID,
+    student_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """Re-include a student in a class assessment (remove from exclusion list)"""
+    assessment = get_or_404(db, Assessment, Assessment.assessment_id == assessment_id, "Assessment not found")
+    
+    # Remove student from exclusion list if present
+    if assessment.excluded_students and student_id in assessment.excluded_students:
+        assessment.excluded_students = [sid for sid in assessment.excluded_students if sid != student_id]
+        db.commit()
+        db.refresh(assessment)
+    
+    return success_response({"message": "Student included in assessment", "excluded_students": assessment.excluded_students})
 
 @router.post("/submit")
 async def submit_assessment(
@@ -345,7 +413,8 @@ async def get_assessment(
         "template": {
             "template_id": assessment.template.template_id,
             "name": assessment.template.name,
-            "category": assessment.template.category
+            "category": assessment.template.category,
+            "questions": assessment.template.questions
         },
         "school_id": assessment.school_id,
         "class_id": assessment.class_id,
@@ -357,7 +426,7 @@ async def get_assessment(
         "student_results": list(student_data.values())
     })
 
-@router.get("/")
+@router.get("")
 async def list_assessments(
     school_id: Optional[UUID] = None,
     class_id: Optional[UUID] = None,

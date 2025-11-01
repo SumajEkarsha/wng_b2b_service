@@ -12,436 +12,658 @@ from app.models.user import UserRole
 from app.models.student import Gender
 from app.models.observation import Severity
 from app.models.resource import ResourceType, ResourceStatus
+from app.models.activity import Activity, ActivityType
 from datetime import datetime, date, timedelta
+import random
+
+# Helper function to generate realistic student data
+def generate_student_data(school_id, class_id, start_index, count, grade_year):
+    """Generate realistic student data with parents"""
+    first_names_male = ["Alex", "Noah", "Liam", "Ethan", "Mason", "James", "Benjamin", "Lucas", "Henry", "Sebastian",
+                        "Jack", "Owen", "Daniel", "Matthew", "Jackson", "Logan", "David", "Joseph", "Samuel", "Michael",
+                        "Elijah", "Oliver", "William", "Ryan", "Nathan", "Caleb", "Dylan", "Tyler", "Andrew", "Joshua",
+                        "Christopher", "Anthony", "Thomas", "Charles", "Isaiah", "Gabriel", "Carter", "Jayden", "John", "Luke"]
+    
+    first_names_female = ["Emma", "Olivia", "Ava", "Sophia", "Isabella", "Mia", "Charlotte", "Amelia", "Harper", "Ella",
+                          "Emily", "Madison", "Abigail", "Lily", "Chloe", "Grace", "Zoe", "Hannah", "Victoria", "Aria",
+                          "Scarlett", "Natalie", "Addison", "Lillian", "Brooklyn", "Layla", "Evelyn", "Claire", "Stella", "Audrey",
+                          "Zoey", "Penelope", "Riley", "Nora", "Hazel", "Camila", "Violet", "Aurora", "Savannah", "Bella"]
+    
+    last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez",
+                  "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin",
+                  "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson",
+                  "Walker", "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores",
+                  "Green", "Adams", "Nelson", "Baker", "Hall", "Rivera", "Campbell", "Mitchell", "Carter", "Roberts"]
+    
+    parent_first_names = ["Mary", "John", "Sarah", "Michael", "Lisa", "David", "Jennifer", "Robert", "Linda", "James",
+                          "Patricia", "William", "Barbara", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Karen", "Charles"]
+    
+    students = []
+    parents = []
+    birth_year = 2024 - grade_year
+    
+    for i in range(count):
+        gender = random.choice([Gender.MALE, Gender.FEMALE])
+        first_name = random.choice(first_names_male if gender == Gender.MALE else first_names_female)
+        last_name = random.choice(last_names)
+        
+        # Generate birth date
+        month = random.randint(1, 12)
+        day = random.randint(1, 28)
+        dob = date(birth_year, month, day)
+        
+        # Generate parent data (1-2 parents per student)
+        num_parents = random.choice([1, 2])
+        student_parents = []
+        
+        for p in range(num_parents):
+            parent_first_name = random.choice(parent_first_names)
+            parent_display_name = f"{parent_first_name} {last_name}"
+            parent_email = f"{last_name.lower()}.{parent_first_name.lower()}{start_index+i}p{p}@email.com"
+            parent_phone = f"+1-555-{random.randint(1000, 9999)}"
+            
+            parent_data = {
+                "school_id": school_id,
+                "display_name": parent_display_name,
+                "email": parent_email,
+                "phone": parent_phone,
+                "student_index": start_index + i  # To link back to student
+            }
+            parents.append(parent_data)
+            student_parents.append(parent_data)
+        
+        students.append({
+            "school_id": school_id,
+            "first_name": first_name,
+            "last_name": last_name,
+            "gender": gender,
+            "dob": dob,
+            "class_id": class_id,
+            "parent_email": student_parents[0]["email"],  # Legacy field
+            "parent_phone": student_parents[0]["phone"],  # Legacy field
+            "parent_data": student_parents  # For linking
+        })
+    
+    return students, parents
 
 def seed_database():
+    # Drop and recreate all tables for a fresh start
+    print("\n" + "="*70)
+    print("PREPARING DATABASE FOR SEEDING")
+    print("="*70 + "\n")
+    
+    print("🗑️  Dropping existing tables...")
+    Base.metadata.drop_all(bind=engine)
+    print("✅ Tables dropped")
+    
+    print("\n🔨 Creating fresh tables...")
     Base.metadata.create_all(bind=engine)
+    print("✅ Tables created")
+    
     db = SessionLocal()
     
     try:
+        print("\n" + "="*70)
+        print("SEEDING DATABASE WITH 2 SCHOOLS - 250 STUDENTS EACH")
+        print("="*70 + "\n")
+        
+        # === SCHOOLS ===
+        print("📚 Creating schools...")
         school1 = School(
-            name="Greenwood High School",
-            address="123 Education Lane",
+            name="Lincoln High School",
+            address="500 Education Boulevard",
             city="Springfield",
             state="Illinois",
             country="USA",
             phone="+1-555-0100",
-            email="admin@greenwood.edu",
-            website="https://greenwood.edu",
+            email="admin@lincoln.edu",
+            website="https://lincoln.edu",
             timezone="America/Chicago",
             academic_year="2024-2025",
             settings={"enable_ai": True, "parent_portal": True}
         )
         
         school2 = School(
-            name="Riverside Academy",
-            address="456 River Road",
+            name="Washington Academy",
+            address="750 Knowledge Avenue",
             city="Portland",
             state="Oregon",
             country="USA",
             phone="+1-555-0200",
-            email="info@riverside.edu",
-            website="https://riverside.edu",
+            email="info@washington.edu",
+            website="https://washington.edu",
             timezone="America/Los_Angeles",
-            academic_year="2024-2025"
+            academic_year="2024-2025",
+            settings={"enable_ai": True, "parent_portal": True}
         )
         
         db.add_all([school1, school2])
         db.flush()
+        print(f"✅ Created 2 schools")
         
+        # === SCHOOL 1 STAFF ===
+        print("\n👥 Creating staff for School 1...")
+        
+        # Principal
         principal1 = User(
             school_id=school1.school_id,
             role=UserRole.PRINCIPAL,
-            email="principal@greenwood.edu",
+            email="principal@lincoln.edu",
             hashed_password=get_password_hash("password123"),
             display_name="Dr. Margaret Thompson",
             phone="+1-555-0101",
             profile={
-                "qualifications": ["PhD in Education", "20 years experience"],
-                "specializations": ["School Leadership"]
+                "qualifications": ["PhD in Education", "25 years experience"],
+                "specializations": ["School Leadership", "Curriculum Development"]
             }
         )
         
-        counsellor1 = User(
-            school_id=school1.school_id,
-            role=UserRole.COUNSELLOR,
-            email="counsellor1@greenwood.edu",
-            hashed_password=get_password_hash("password123"),
-            display_name="Dr. Sarah Johnson",
-            phone="+1-555-0102",
-            profile={
-                "qualifications": ["MA in Psychology", "Licensed Counselor"],
-                "specializations": ["Anxiety", "Depression", "Trauma"],
-                "languages": ["English", "Spanish"]
-            },
-            availability={
-                "monday": ["09:00-17:00"],
-                "tuesday": ["09:00-17:00"],
-                "wednesday": ["09:00-17:00"],
-                "thursday": ["09:00-17:00"],
-                "friday": ["09:00-15:00"]
-            }
-        )
+        # Counsellors (6 for 250 students - ratio of ~42 students per counselor)
+        counsellors_s1 = [
+            User(
+                school_id=school1.school_id,
+                role=UserRole.COUNSELLOR,
+                email=f"counsellor{i}@lincoln.edu",
+                hashed_password=get_password_hash("password123"),
+                display_name=name,
+                phone=f"+1-555-010{i+1}",
+                profile={
+                    "qualifications": quals,
+                    "specializations": specs,
+                    "languages": langs
+                },
+                availability={
+                    "monday": ["09:00-17:00"],
+                    "tuesday": ["09:00-17:00"],
+                    "wednesday": ["09:00-17:00"],
+                    "thursday": ["09:00-17:00"],
+                    "friday": ["09:00-15:00"]
+                }
+            )
+            for i, (name, quals, specs, langs) in enumerate([
+                ("Dr. Sarah Johnson", ["PhD in Psychology", "Licensed Counselor"], ["Anxiety", "Depression", "Trauma"], ["English", "Spanish"]),
+                ("Mr. David Chen", ["MSW", "LCSW"], ["Behavioral Issues", "Family Therapy"], ["English", "Mandarin"]),
+                ("Dr. Emily Rodriguez", ["MA in Counseling"], ["Academic Stress", "Career Counseling"], ["English", "Spanish"]),
+                ("Ms. Rachel Green", ["MA in Psychology"], ["Grief", "Bullying", "Social Skills"], ["English"]),
+                ("Mr. Kevin Patel", ["PhD in Educational Psychology"], ["Learning Disabilities", "ADHD"], ["English", "Hindi"]),
+                ("Dr. Michelle Brown", ["PhD in Clinical Psychology"], ["Eating Disorders", "Self-Esteem", "Body Image"], ["English"])
+            ])
+        ]
         
-        counsellor2 = User(
-            school_id=school1.school_id,
-            role=UserRole.COUNSELLOR,
-            email="counsellor2@greenwood.edu",
-            hashed_password=get_password_hash("password123"),
-            display_name="Mr. David Chen",
-            phone="+1-555-0103",
-            profile={
-                "qualifications": ["MSW", "LCSW"],
-                "specializations": ["Behavioral Issues", "Family Therapy"],
-                "languages": ["English", "Mandarin"]
-            }
-        )
+        # Teachers (12 for multiple classes - need more for 10 classes)
+        teachers_s1 = [
+            User(
+                school_id=school1.school_id,
+                role=UserRole.TEACHER,
+                email=f"teacher{i}@lincoln.edu",
+                hashed_password=get_password_hash("password123"),
+                display_name=name,
+                phone=f"+1-555-011{i}",
+                profile={"subjects": subjects, "experience_years": exp}
+            )
+            for i, (name, subjects, exp) in enumerate([
+                ("Ms. Emily Anderson", ["Mathematics", "Science"], 8),
+                ("Mr. James Wilson", ["English", "Social Studies"], 12),
+                ("Mrs. Lisa Martinez", ["Physical Education", "Health"], 5),
+                ("Mr. Robert Brown", ["Science", "Biology"], 10),
+                ("Ms. Jennifer Lee", ["English Literature", "Writing"], 7),
+                ("Mr. Michael Davis", ["History", "Geography"], 15),
+                ("Ms. Patricia White", ["Mathematics", "Computer Science"], 6),
+                ("Mr. Christopher Hall", ["Art", "Music"], 9),
+                ("Ms. Angela Garcia", ["Spanish", "French"], 11),
+                ("Mr. Thomas Wright", ["Chemistry", "Physics"], 13),
+                ("Ms. Sarah Miller", ["Mathematics", "Statistics"], 9),
+                ("Mr. Daniel Taylor", ["English", "Drama"], 8)
+            ], 1)
+        ]
         
-        teacher1 = User(
-            school_id=school1.school_id,
-            role=UserRole.TEACHER,
-            email="teacher1@greenwood.edu",
-            hashed_password=get_password_hash("password123"),
-            display_name="Ms. Emily Rodriguez",
-            phone="+1-555-0104",
-            profile={
-                "subjects": ["Mathematics", "Science"],
-                "experience_years": 8
-            }
-        )
+        db.add_all([principal1] + counsellors_s1 + teachers_s1)
+        db.flush()
+        print(f"✅ Created 1 principal, 6 counsellors, 12 teachers for School 1")
         
-        teacher2 = User(
-            school_id=school1.school_id,
-            role=UserRole.TEACHER,
-            email="teacher2@greenwood.edu",
-            hashed_password=get_password_hash("password123"),
-            display_name="Mr. James Wilson",
-            phone="+1-555-0105",
-            profile={
-                "subjects": ["English", "Social Studies"],
-                "experience_years": 12
-            }
-        )
+        # === SCHOOL 2 STAFF ===
+        print("\n👥 Creating staff for School 2...")
         
-        teacher3 = User(
-            school_id=school1.school_id,
-            role=UserRole.TEACHER,
-            email="teacher3@greenwood.edu",
-            hashed_password=get_password_hash("password123"),
-            display_name="Mrs. Lisa Anderson",
-            phone="+1-555-0106",
-            profile={
-                "subjects": ["Physical Education", "Health"],
-                "experience_years": 5
-            }
-        )
-        
+        # Principal
         principal2 = User(
             school_id=school2.school_id,
             role=UserRole.PRINCIPAL,
-            email="principal@riverside.edu",
+            email="principal@washington.edu",
             hashed_password=get_password_hash("password123"),
             display_name="Mr. Robert Martinez",
-            phone="+1-555-0201"
+            phone="+1-555-0201",
+            profile={
+                "qualifications": ["EdD in Educational Leadership", "20 years experience"],
+                "specializations": ["School Administration", "Student Wellbeing"]
+            }
         )
         
-        counsellor3 = User(
-            school_id=school2.school_id,
-            role=UserRole.COUNSELLOR,
-            email="counsellor@riverside.edu",
-            hashed_password=get_password_hash("password123"),
-            display_name="Dr. Amanda Foster",
-            phone="+1-555-0202"
-        )
-        
-        db.add_all([principal1, counsellor1, counsellor2, teacher1, teacher2, teacher3, principal2, counsellor3])
-        db.flush()
-        
-        class_5a = Class(
-            school_id=school1.school_id,
-            name="Grade 5-A",
-            grade="5",
-            section="A",
-            academic_year="2024-2025",
-            teacher_id=teacher1.user_id,
-            capacity=30
-        )
-        
-        class_5b = Class(
-            school_id=school1.school_id,
-            name="Grade 5-B",
-            grade="5",
-            section="B",
-            academic_year="2024-2025",
-            teacher_id=teacher2.user_id,
-            capacity=30
-        )
-        
-        class_8a = Class(
-            school_id=school1.school_id,
-            name="Grade 8-A",
-            grade="8",
-            section="A",
-            academic_year="2024-2025",
-            teacher_id=teacher3.user_id,
-            capacity=28
-        )
-        
-        class_10a = Class(
-            school_id=school1.school_id,
-            name="Grade 10-A",
-            grade="10",
-            section="A",
-            academic_year="2024-2025",
-            teacher_id=teacher1.user_id,
-            capacity=25
-        )
-        
-        class_12a = Class(
-            school_id=school1.school_id,
-            name="Grade 12-A",
-            grade="12",
-            section="A",
-            academic_year="2024-2025",
-            teacher_id=teacher2.user_id,
-            capacity=25
-        )
-        
-        db.add_all([class_5a, class_5b, class_8a, class_10a, class_12a])
-        db.flush()
-        
-        students_data = [
-            {"first_name": "Alex", "last_name": "Williams", "gender": Gender.MALE, "dob": date(2014, 3, 15), "class_id": class_5a.class_id, "parent_email": "williams@email.com", "parent_phone": "+1-555-1001"},
-            {"first_name": "Emma", "last_name": "Brown", "gender": Gender.FEMALE, "dob": date(2014, 7, 22), "class_id": class_5a.class_id, "parent_email": "brown@email.com", "parent_phone": "+1-555-1002"},
-            {"first_name": "Noah", "last_name": "Davis", "gender": Gender.MALE, "dob": date(2014, 5, 10), "class_id": class_5a.class_id, "parent_email": "davis@email.com", "parent_phone": "+1-555-1003"},
-            {"first_name": "Olivia", "last_name": "Miller", "gender": Gender.FEMALE, "dob": date(2014, 9, 8), "class_id": class_5a.class_id, "parent_email": "miller@email.com", "parent_phone": "+1-555-1004"},
-            {"first_name": "Liam", "last_name": "Garcia", "gender": Gender.MALE, "dob": date(2014, 2, 18), "class_id": class_5b.class_id, "parent_email": "garcia@email.com", "parent_phone": "+1-555-1005"},
-            {"first_name": "Sophia", "last_name": "Martinez", "gender": Gender.FEMALE, "dob": date(2014, 11, 25), "class_id": class_5b.class_id, "parent_email": "martinez@email.com", "parent_phone": "+1-555-1006"},
-            {"first_name": "Ethan", "last_name": "Lopez", "gender": Gender.MALE, "dob": date(2011, 4, 12), "class_id": class_8a.class_id, "parent_email": "lopez@email.com", "parent_phone": "+1-555-1007"},
-            {"first_name": "Ava", "last_name": "Gonzalez", "gender": Gender.FEMALE, "dob": date(2011, 8, 30), "class_id": class_8a.class_id, "parent_email": "gonzalez@email.com", "parent_phone": "+1-555-1008"},
-            {"first_name": "Mason", "last_name": "Wilson", "gender": Gender.MALE, "dob": date(2011, 6, 5), "class_id": class_8a.class_id, "parent_email": "wilson@email.com", "parent_phone": "+1-555-1009"},
-            {"first_name": "Isabella", "last_name": "Anderson", "gender": Gender.FEMALE, "dob": date(2009, 1, 20), "class_id": class_10a.class_id, "parent_email": "anderson@email.com", "parent_phone": "+1-555-1010"},
-            {"first_name": "James", "last_name": "Thomas", "gender": Gender.MALE, "dob": date(2009, 10, 14), "class_id": class_10a.class_id, "parent_email": "thomas@email.com", "parent_phone": "+1-555-1011"},
-            {"first_name": "Mia", "last_name": "Taylor", "gender": Gender.FEMALE, "dob": date(2009, 3, 28), "class_id": class_10a.class_id, "parent_email": "taylor@email.com", "parent_phone": "+1-555-1012"},
-            {"first_name": "Benjamin", "last_name": "Moore", "gender": Gender.MALE, "dob": date(2007, 5, 16), "class_id": class_12a.class_id, "parent_email": "moore@email.com", "parent_phone": "+1-555-1013"},
-            {"first_name": "Charlotte", "last_name": "Jackson", "gender": Gender.FEMALE, "dob": date(2007, 12, 3), "class_id": class_12a.class_id, "parent_email": "jackson@email.com", "parent_phone": "+1-555-1014"},
-            {"first_name": "Lucas", "last_name": "White", "gender": Gender.MALE, "dob": date(2007, 7, 9), "class_id": class_12a.class_id, "parent_email": "white@email.com", "parent_phone": "+1-555-1015"},
+        # Counsellors (6 for 250 students - ratio of ~42 students per counselor)
+        counsellors_s2 = [
+            User(
+                school_id=school2.school_id,
+                role=UserRole.COUNSELLOR,
+                email=f"counsellor{i}@washington.edu",
+                hashed_password=get_password_hash("password123"),
+                display_name=name,
+                phone=f"+1-555-020{i+1}",
+                profile={
+                    "qualifications": quals,
+                    "specializations": specs,
+                    "languages": langs
+                },
+                availability={
+                    "monday": ["09:00-17:00"],
+                    "tuesday": ["09:00-17:00"],
+                    "wednesday": ["09:00-17:00"],
+                    "thursday": ["09:00-17:00"],
+                    "friday": ["09:00-15:00"]
+                }
+            )
+            for i, (name, quals, specs, langs) in enumerate([
+                ("Dr. Amanda Foster", ["PhD in Clinical Psychology"], ["ADHD", "Learning Disabilities", "Autism"], ["English"]),
+                ("Ms. Maria Gonzalez", ["MA in Counseling"], ["Anxiety", "Depression", "Self-Esteem"], ["English", "Spanish"]),
+                ("Mr. Daniel Kim", ["MSW", "LICSW"], ["Substance Abuse", "Peer Pressure", "Crisis"], ["English", "Korean"]),
+                ("Dr. Linda Carter", ["PhD in Psychology"], ["Trauma", "PTSD", "Family Issues"], ["English"]),
+                ("Ms. Priya Sharma", ["MA in School Counseling"], ["Academic Stress", "Career Planning"], ["English", "Hindi"]),
+                ("Dr. James Anderson", ["PhD in Educational Psychology"], ["Behavioral Issues", "Social Skills"], ["English"])
+            ])
         ]
         
-        students = []
-        for student_data in students_data:
-            student = Student(
-                school_id=school1.school_id,
-                **student_data
+        # Teachers (12 for multiple classes - need more for 10 classes)
+        teachers_s2 = [
+            User(
+                school_id=school2.school_id,
+                role=UserRole.TEACHER,
+                email=f"teacher{i}@washington.edu",
+                hashed_password=get_password_hash("password123"),
+                display_name=name,
+                phone=f"+1-555-021{i}",
+                profile={"subjects": subjects, "experience_years": exp}
             )
-            students.append(student)
+            for i, (name, subjects, exp) in enumerate([
+                ("Ms. Jennifer Taylor", ["Mathematics", "Algebra"], 9),
+                ("Mr. Michael Brown", ["History", "Social Studies"], 14),
+                ("Mrs. Susan Clark", ["English", "Literature"], 8),
+                ("Mr. David Wilson", ["Science", "Chemistry"], 11),
+                ("Ms. Karen Moore", ["Physical Education", "Sports"], 6),
+                ("Mr. Richard Jackson", ["Computer Science", "Technology"], 10),
+                ("Ms. Nancy White", ["Biology", "Environmental Science"], 12),
+                ("Mr. Paul Harris", ["Mathematics", "Geometry"], 7),
+                ("Ms. Laura Martin", ["Art", "Design"], 9),
+                ("Mr. Steven Thompson", ["Music", "Drama"], 15),
+                ("Ms. Rebecca Adams", ["English", "Creative Writing"], 10),
+                ("Mr. George Martinez", ["Science", "Physics"], 13)
+            ], 1)
+        ]
         
-        db.add_all(students)
+        db.add_all([principal2] + counsellors_s2 + teachers_s2)
         db.flush()
+        print(f"✅ Created 1 principal, 6 counsellors, 12 teachers for School 2")
         
-        case1 = Case(
-            student_id=students[0].student_id,
-            created_by=counsellor1.user_id,
-            status=CaseStatus.INTERVENTION,
-            risk_level=RiskLevel.MEDIUM,
-            assigned_counsellor=counsellor1.user_id,
-            tags=["anxiety", "social-skills"],
-            ai_summary="Student showing moderate anxiety, working on social skills development with positive progress"
-        )
+        # === CLASSES FOR SCHOOL 1 ===
+        print("\n📖 Creating classes for School 1...")
+        classes_s1 = []
         
-        case2 = Case(
-            student_id=students[1].student_id,
-            created_by=counsellor1.user_id,
-            status=CaseStatus.MONITORING,
-            risk_level=RiskLevel.LOW,
-            assigned_counsellor=counsellor1.user_id,
-            tags=["adjustment", "peer-relationships"],
-            ai_summary="Student making progress in peer relationships, monitoring for continued improvement"
-        )
+        # Create 10 classes (Grades 9-12, with varying sections) - 25 students per class = 250 total
+        # Grade 9: 3 sections (75 students)
+        # Grade 10: 3 sections (75 students)
+        # Grade 11: 2 sections (50 students)
+        # Grade 12: 2 sections (50 students)
+        class_distribution = [
+            ("9", ["A", "B", "C"]),
+            ("10", ["A", "B", "C"]),
+            ("11", ["A", "B"]),
+            ("12", ["A", "B"])
+        ]
         
-        case3 = Case(
-            student_id=students[6].student_id,
-            created_by=counsellor2.user_id,
-            status=CaseStatus.ASSESSMENT,
-            risk_level=RiskLevel.HIGH,
-            assigned_counsellor=counsellor2.user_id,
-            tags=["depression", "self-harm-risk"],
-            ai_summary="High-risk case: Student presenting with depression symptoms. External referral recommended and parent meeting scheduled"
-        )
+        for grade, sections in class_distribution:
+            for section in sections:
+                teacher = random.choice(teachers_s1)
+                class_obj = Class(
+                    school_id=school1.school_id,
+                    name=f"Grade {grade}-{section}",
+                    grade=grade,
+                    section=section,
+                    academic_year="2024-2025",
+                    teacher_id=teacher.user_id,
+                    capacity=25
+                )
+                classes_s1.append(class_obj)
         
-        case4 = Case(
-            student_id=students[12].student_id,
-            created_by=counsellor1.user_id,
-            status=CaseStatus.INTAKE,
-            risk_level=RiskLevel.MEDIUM,
-            assigned_counsellor=counsellor1.user_id,
-            tags=["exam-stress", "burnout"],
-            ai_summary="New case: Exam-related stress and sleep disturbance. Starting stress management intervention"
-        )
-        
-        db.add_all([case1, case2, case3, case4])
+        db.add_all(classes_s1)
         db.flush()
+        print(f"✅ Created {len(classes_s1)} classes for School 1")
         
-        # Create journal entries for cases
-        journal1 = JournalEntry(
-            case_id=case1.case_id,
-            author_id=counsellor1.user_id,
-            visibility=EntryVisibility.SHARED,
-            type=EntryType.SESSION_NOTE,
-            content="Initial session completed. Student expressed concerns about social interactions and peer relationships. Agreed on weekly sessions focused on social skills development.",
-            created_at=datetime.utcnow() - timedelta(days=14)
-        )
+        # === CLASSES FOR SCHOOL 2 ===
+        print("\n📖 Creating classes for School 2...")
+        classes_s2 = []
         
-        journal2 = JournalEntry(
-            case_id=case1.case_id,
-            author_id=counsellor1.user_id,
-            visibility=EntryVisibility.SHARED,
-            type=EntryType.SESSION_NOTE,
-            content="Second session - practiced conversation starters and active listening techniques. Student showed improvement in eye contact and engagement.",
-            created_at=datetime.utcnow() - timedelta(days=7)
-        )
+        # Create 10 classes (Grades 9-12, with varying sections) - 25 students per class = 250 total
+        # Grade 9: 3 sections (75 students)
+        # Grade 10: 3 sections (75 students)
+        # Grade 11: 2 sections (50 students)
+        # Grade 12: 2 sections (50 students)
+        class_distribution = [
+            ("9", ["A", "B", "C"]),
+            ("10", ["A", "B", "C"]),
+            ("11", ["A", "B"]),
+            ("12", ["A", "B"])
+        ]
         
-        journal3 = JournalEntry(
-            case_id=case2.case_id,
-            author_id=counsellor1.user_id,
-            visibility=EntryVisibility.SHARED,
-            type=EntryType.SESSION_NOTE,
-            content="Follow-up session. Student reports making a new friend in class. Discussed strategies for maintaining friendships and handling conflicts.",
-            created_at=datetime.utcnow() - timedelta(days=10)
-        )
+        for grade, sections in class_distribution:
+            for section in sections:
+                teacher = random.choice(teachers_s2)
+                class_obj = Class(
+                    school_id=school2.school_id,
+                    name=f"Grade {grade}-{section}",
+                    grade=grade,
+                    section=section,
+                    academic_year="2024-2025",
+                    teacher_id=teacher.user_id,
+                    capacity=25
+                )
+                classes_s2.append(class_obj)
         
-        journal4 = JournalEntry(
-            case_id=case3.case_id,
-            author_id=counsellor2.user_id,
-            visibility=EntryVisibility.PRIVATE,
-            type=EntryType.ASSESSMENT_RESULT,
-            content="PHQ-9 assessment completed. Score: 18 (moderately severe depression). Recommend continued monitoring and potential referral to external mental health services.",
-            created_at=datetime.utcnow() - timedelta(days=5)
-        )
-        
-        journal5 = JournalEntry(
-            case_id=case3.case_id,
-            author_id=counsellor2.user_id,
-            visibility=EntryVisibility.SHARED,
-            type=EntryType.CONTACT_LOG,
-            content="Parent contacted. Discussed assessment results and recommended external support options. Parents agreed to schedule appointment with psychiatrist.",
-            created_at=datetime.utcnow() - timedelta(days=3)
-        )
-        
-        journal6 = JournalEntry(
-            case_id=case4.case_id,
-            author_id=counsellor1.user_id,
-            visibility=EntryVisibility.SHARED,
-            type=EntryType.SESSION_NOTE,
-            content="Intake session. Student reports high stress levels due to upcoming board exams. Sleep pattern disrupted. Discussed stress management techniques and time management strategies.",
-            created_at=datetime.utcnow() - timedelta(days=2)
-        )
-        
-        db.add_all([journal1, journal2, journal3, journal4, journal5, journal6])
+        db.add_all(classes_s2)
         db.flush()
+        print(f"✅ Created {len(classes_s2)} classes for School 2")
         
-        obs1 = Observation(
-            student_id=students[0].student_id,
-            reported_by=teacher1.user_id,
-            severity=Severity.MEDIUM,
-            category="behavioral",
-            content="Student appears withdrawn during group activities. Reluctant to participate in class discussions.",
-            ai_summary="Student showing signs of social withdrawal in group settings"
-        )
+        # === PARENTS & STUDENTS FOR SCHOOL 1 ===
+        print("\n👨‍👩‍👧‍👦 Creating parents for School 1...")
+        students_s1_data = []
+        parents_s1_data = []
         
-        obs2 = Observation(
-            student_id=students[1].student_id,
-            reported_by=teacher1.user_id,
-            severity=Severity.LOW,
-            category="social",
-            content="Difficulty making friends. Prefers to work alone.",
-            ai_summary="Student demonstrates preference for solitary activities"
-        )
+        # Distribute students across classes (exactly 25 per class for 250 total)
+        for i, class_obj in enumerate(classes_s1):
+            grade_num = int(class_obj.grade)
+            grade_year = grade_num  # Age calculation
+            student_count = 25  # Fixed 25 students per class
+            students_data, parents_data = generate_student_data(
+                school1.school_id, 
+                class_obj.class_id, 
+                i * 25, 
+                student_count, 
+                grade_year
+            )
+            students_s1_data.extend(students_data)
+            parents_s1_data.extend(parents_data)
         
-        obs3 = Observation(
-            student_id=students[6].student_id,
-            reported_by=teacher3.user_id,
-            severity=Severity.HIGH,
-            category="emotional",
-            content="Student showed signs of distress. Mentioned feeling hopeless. Immediate counselor referral made.",
-            ai_summary="High priority: Student expressing hopelessness, immediate intervention required"
-        )
+        # Create parent users
+        parents_s1 = []
+        for parent_data in parents_s1_data:
+            parent = User(
+                school_id=parent_data["school_id"],
+                role=UserRole.PARENT,
+                email=parent_data["email"],
+                hashed_password=get_password_hash("password123"),
+                display_name=parent_data["display_name"],
+                phone=parent_data["phone"],
+                profile={
+                    "preferred_contact_method": "email",
+                    "languages": ["English"]
+                }
+            )
+            parents_s1.append(parent)
         
-        obs4 = Observation(
-            student_id=students[12].student_id,
-            reported_by=teacher2.user_id,
-            severity=Severity.MEDIUM,
-            category="academic-stress",
-            content="Student expressed extreme anxiety about upcoming exams. Sleep deprivation reported.",
-            ai_summary="Exam-related anxiety affecting sleep patterns"
-        )
-        
-        obs5 = Observation(
-            student_id=students[2].student_id,
-            reported_by=teacher1.user_id,
-            severity=Severity.LOW,
-            category="behavioral",
-            content="Occasional disruptive behavior in class. Seeking attention.",
-            ai_summary="Minor behavioral concern: Attention-seeking behavior observed"
-        )
-        
-        db.add_all([obs1, obs2, obs3, obs4, obs5])
+        db.add_all(parents_s1)
         db.flush()
+        print(f"✅ Created {len(parents_s1)} parents for School 1")
+        
+        # Create students and link to parents
+        print("\n👨‍🎓 Creating students for School 1...")
+        students_s1 = []
+        for student_data in students_s1_data:
+            # Find parent IDs for this student
+            parent_ids = [p.user_id for p in parents_s1 
+                         if any(pd["student_index"] == students_s1_data.index(student_data) 
+                               for pd in parents_s1_data 
+                               if pd["email"] == p.email)]
+            
+            # Remove parent_data before creating Student object
+            parent_data_list = student_data.pop("parent_data", [])
+            
+            # Link parents by email matching
+            linked_parent_ids = []
+            for pd in parent_data_list:
+                for parent in parents_s1:
+                    if parent.email == pd["email"]:
+                        linked_parent_ids.append(str(parent.user_id))
+                        break
+            
+            student = Student(
+                **student_data,
+                parents_id=linked_parent_ids if linked_parent_ids else None
+            )
+            students_s1.append(student)
+        
+        db.add_all(students_s1)
+        db.flush()
+        print(f"✅ Created {len(students_s1)} students for School 1")
+        
+        # === PARENTS & STUDENTS FOR SCHOOL 2 ===
+        print("\n👨‍👩‍👧‍👦 Creating parents for School 2...")
+        students_s2_data = []
+        parents_s2_data = []
+        
+        # Distribute students across classes (exactly 25 per class for 250 total)
+        for i, class_obj in enumerate(classes_s2):
+            grade_num = int(class_obj.grade)
+            grade_year = grade_num  # Age calculation
+            student_count = 25  # Fixed 25 students per class
+            students_data, parents_data = generate_student_data(
+                school2.school_id, 
+                class_obj.class_id, 
+                i * 25, 
+                student_count, 
+                grade_year
+            )
+            students_s2_data.extend(students_data)
+            parents_s2_data.extend(parents_data)
+        
+        # Create parent users
+        parents_s2 = []
+        for parent_data in parents_s2_data:
+            parent = User(
+                school_id=parent_data["school_id"],
+                role=UserRole.PARENT,
+                email=parent_data["email"],
+                hashed_password=get_password_hash("password123"),
+                display_name=parent_data["display_name"],
+                phone=parent_data["phone"],
+                profile={
+                    "preferred_contact_method": "email",
+                    "languages": ["English"]
+                }
+            )
+            parents_s2.append(parent)
+        
+        db.add_all(parents_s2)
+        db.flush()
+        print(f"✅ Created {len(parents_s2)} parents for School 2")
+        
+        # Create students and link to parents
+        print("\n👨‍🎓 Creating students for School 2...")
+        students_s2 = []
+        for student_data in students_s2_data:
+            # Remove parent_data before creating Student object
+            parent_data_list = student_data.pop("parent_data", [])
+            
+            # Link parents by email matching
+            linked_parent_ids = []
+            for pd in parent_data_list:
+                for parent in parents_s2:
+                    if parent.email == pd["email"]:
+                        linked_parent_ids.append(str(parent.user_id))
+                        break
+            
+            student = Student(
+                **student_data,
+                parents_id=linked_parent_ids if linked_parent_ids else None
+            )
+            students_s2.append(student)
+        
+        db.add_all(students_s2)
+        db.flush()
+        print(f"✅ Created {len(students_s2)} students for School 2")
+        
+        all_students = students_s1 + students_s2
+        
+        # === CASES ===
+        print("\n📋 Creating cases...")
+        cases = []
+        
+        # School 1 Cases (12-15% of students have cases - ~30-38 cases for 250 students)
+        case_count_s1 = int(len(students_s1) * 0.14)
+        for i in range(case_count_s1):
+            student = random.choice(students_s1)
+            counsellor = random.choice(counsellors_s1)
+            status = random.choice(list(CaseStatus))
+            risk = random.choice(list(RiskLevel))
+            
+            tags_options = [
+                ["anxiety", "social-skills"],
+                ["depression", "self-harm-risk"],
+                ["adhd", "focus-issues"],
+                ["bullying", "trauma"],
+                ["exam-stress", "burnout"],
+                ["family-issues", "adjustment"],
+                ["grief", "loss"],
+                ["substance-abuse-risk", "peer-pressure"],
+                ["eating-concerns", "body-image"],
+                ["academic-stress", "perfectionism"]
+            ]
+            
+            case = Case(
+                student_id=student.student_id,
+                created_by=counsellor.user_id,
+                status=status,
+                risk_level=risk,
+                assigned_counsellor=counsellor.user_id,
+                tags=random.choice(tags_options),
+                ai_summary=f"Case for {student.first_name} {student.last_name}: {status.value} status with {risk.value} risk level"
+            )
+            cases.append(case)
+        
+        # School 2 Cases (12-15% of students have cases - ~30-38 cases for 250 students)
+        case_count_s2 = int(len(students_s2) * 0.14)
+        for i in range(case_count_s2):
+            student = random.choice(students_s2)
+            counsellor = random.choice(counsellors_s2)
+            status = random.choice(list(CaseStatus))
+            risk = random.choice(list(RiskLevel))
+            
+            tags_options = [
+                ["anxiety", "social-skills"],
+                ["depression", "self-harm-risk"],
+                ["adhd", "focus-issues"],
+                ["bullying", "trauma"],
+                ["exam-stress", "burnout"],
+                ["family-issues", "adjustment"],
+                ["grief", "loss"],
+                ["substance-abuse-risk", "peer-pressure"],
+                ["eating-concerns", "body-image"],
+                ["academic-stress", "perfectionism"]
+            ]
+            
+            case = Case(
+                student_id=student.student_id,
+                created_by=counsellor.user_id,
+                status=status,
+                risk_level=risk,
+                assigned_counsellor=counsellor.user_id,
+                tags=random.choice(tags_options),
+                ai_summary=f"Case for {student.first_name} {student.last_name}: {status.value} status with {risk.value} risk level"
+            )
+            cases.append(case)
+        
+        db.add_all(cases)
+        db.flush()
+        print(f"✅ Created {len(cases)} cases ({case_count_s1} for School 1, {case_count_s2} for School 2)")
+        
+        # === JOURNAL ENTRIES ===
+        print("\n📝 Creating journal entries...")
+        journal_entries = []
+        
+        for case in cases:
+            # 2-4 journal entries per case
+            entry_count = random.randint(2, 4)
+            for j in range(entry_count):
+                entry = JournalEntry(
+                    case_id=case.case_id,
+                    author_id=case.assigned_counsellor,
+                    visibility=random.choice(list(EntryVisibility)),
+                    type=random.choice(list(EntryType)),
+                    content=f"Session note {j+1} for case {case.case_id}. Student showing progress in treatment plan.",
+                    created_at=datetime.utcnow() - timedelta(days=random.randint(1, 30))
+                )
+                journal_entries.append(entry)
+        
+        db.add_all(journal_entries)
+        db.flush()
+        print(f"✅ Created {len(journal_entries)} journal entries")
+        
+        # === OBSERVATIONS ===
+        print("\n👁️ Creating observations...")
+        observations = []
+        
+        # School 1 Observations (8-10% of students - ~20-25 observations for 250 students)
+        obs_count_s1 = int(len(students_s1) * 0.09)
+        for i in range(obs_count_s1):
+            student = random.choice(students_s1)
+            teacher = random.choice(teachers_s1)
+            severity = random.choice(list(Severity))
+            
+            categories = ["behavioral", "social", "emotional", "academic-stress", "academic", "health"]
+            category = random.choice(categories)
+            
+            obs = Observation(
+                student_id=student.student_id,
+                reported_by=teacher.user_id,
+                severity=severity,
+                category=category,
+                content=f"Observation for {student.first_name}: {category} concern noted in class.",
+                ai_summary=f"{severity.value} severity {category} observation"
+            )
+            observations.append(obs)
+        
+        # School 2 Observations (8-10% of students - ~20-25 observations for 250 students)
+        obs_count_s2 = int(len(students_s2) * 0.09)
+        for i in range(obs_count_s2):
+            student = random.choice(students_s2)
+            teacher = random.choice(teachers_s2)
+            severity = random.choice(list(Severity))
+            
+            categories = ["behavioral", "social", "emotional", "academic-stress", "academic", "health"]
+            category = random.choice(categories)
+            
+            obs = Observation(
+                student_id=student.student_id,
+                reported_by=teacher.user_id,
+                severity=severity,
+                category=category,
+                content=f"Observation for {student.first_name}: {category} concern noted in class.",
+                ai_summary=f"{severity.value} severity {category} observation"
+            )
+            observations.append(obs)
+        
+        db.add_all(observations)
+        db.flush()
+        print(f"✅ Created {len(observations)} observations ({obs_count_s1} for School 1, {obs_count_s2} for School 2)")
         
         # === ASSESSMENT TEMPLATES ===
+        print("\n📊 Creating assessment templates...")
         
-        # 1. PHQ-9 Depression Screening
+        # PHQ-9 Depression Screening
         template_phq9 = AssessmentTemplate(
             name="PHQ-9 Depression Screening",
             description="Patient Health Questionnaire - 9 items for depression screening",
             category="depression",
-            created_by=counsellor1.user_id,
+            created_by=counsellors_s1[0].user_id,
             questions=[
                 {
-                    "question_id": "q1",
-                    "question_text": "Little interest or pleasure in doing things",
-                    "question_type": "rating_scale",
-                    "required": True,
-                    "min_value": 0,
-                    "max_value": 3,
-                    "answer_options": [
-                        {"option_id": "0", "text": "Not at all", "value": 0},
-                        {"option_id": "1", "text": "Several days", "value": 1},
-                        {"option_id": "2", "text": "More than half the days", "value": 2},
-                        {"option_id": "3", "text": "Nearly every day", "value": 3}
-                    ]
-                },
-                {
-                    "question_id": "q2",
-                    "question_text": "Feeling down, depressed, or hopeless",
-                    "question_type": "rating_scale",
-                    "required": True,
-                    "min_value": 0,
-                    "max_value": 3,
-                    "answer_options": [
-                        {"option_id": "0", "text": "Not at all", "value": 0},
-                        {"option_id": "1", "text": "Several days", "value": 1},
-                        {"option_id": "2", "text": "More than half the days", "value": 2},
-                        {"option_id": "3", "text": "Nearly every day", "value": 3}
-                    ]
-                },
-                {
-                    "question_id": "q3",
-                    "question_text": "Trouble falling or staying asleep, or sleeping too much",
-                    "question_type": "rating_scale",
-                    "required": True,
-                    "min_value": 0,
-                    "max_value": 3,
-                    "answer_options": [
-                        {"option_id": "0", "text": "Not at all", "value": 0},
-                        {"option_id": "1", "text": "Several days", "value": 1},
-                        {"option_id": "2", "text": "More than half the days", "value": 2},
-                        {"option_id": "3", "text": "Nearly every day", "value": 3}
-                    ]
-                },
-                {
-                    "question_id": "q4",
-                    "question_text": "Feeling tired or having little energy",
+                    "question_id": f"q{i}",
+                    "question_text": text,
                     "question_type": "rating_scale",
                     "required": True,
                     "min_value": 0,
@@ -453,6 +675,12 @@ def seed_database():
                         {"option_id": "3", "text": "Nearly every day", "value": 3}
                     ]
                 }
+                for i, text in enumerate([
+                    "Little interest or pleasure in doing things",
+                    "Feeling down, depressed, or hopeless",
+                    "Trouble falling or staying asleep, or sleeping too much",
+                    "Feeling tired or having little energy"
+                ], 1)
             ],
             scoring_rules={
                 "total_score": "sum_all",
@@ -466,44 +694,16 @@ def seed_database():
             }
         )
         
-        # 2. GAD-7 Anxiety Screening
+        # GAD-7 Anxiety Screening
         template_gad7 = AssessmentTemplate(
             name="GAD-7 Anxiety Screening",
             description="Generalized Anxiety Disorder - 7 items",
             category="anxiety",
-            created_by=counsellor1.user_id,
+            created_by=counsellors_s1[0].user_id,
             questions=[
                 {
-                    "question_id": "q1",
-                    "question_text": "Feeling nervous, anxious, or on edge",
-                    "question_type": "rating_scale",
-                    "required": True,
-                    "min_value": 0,
-                    "max_value": 3,
-                    "answer_options": [
-                        {"option_id": "0", "text": "Not at all", "value": 0},
-                        {"option_id": "1", "text": "Several days", "value": 1},
-                        {"option_id": "2", "text": "More than half the days", "value": 2},
-                        {"option_id": "3", "text": "Nearly every day", "value": 3}
-                    ]
-                },
-                {
-                    "question_id": "q2",
-                    "question_text": "Not being able to stop or control worrying",
-                    "question_type": "rating_scale",
-                    "required": True,
-                    "min_value": 0,
-                    "max_value": 3,
-                    "answer_options": [
-                        {"option_id": "0", "text": "Not at all", "value": 0},
-                        {"option_id": "1", "text": "Several days", "value": 1},
-                        {"option_id": "2", "text": "More than half the days", "value": 2},
-                        {"option_id": "3", "text": "Nearly every day", "value": 3}
-                    ]
-                },
-                {
-                    "question_id": "q3",
-                    "question_text": "Worrying too much about different things",
+                    "question_id": f"q{i}",
+                    "question_text": text,
                     "question_type": "rating_scale",
                     "required": True,
                     "min_value": 0,
@@ -515,6 +715,11 @@ def seed_database():
                         {"option_id": "3", "text": "Nearly every day", "value": 3}
                     ]
                 }
+                for i, text in enumerate([
+                    "Feeling nervous, anxious, or on edge",
+                    "Not being able to stop or control worrying",
+                    "Worrying too much about different things"
+                ], 1)
             ],
             scoring_rules={
                 "total_score": "sum_all",
@@ -527,12 +732,12 @@ def seed_database():
             }
         )
         
-        # 3. Exam Stress Assessment
+        # Academic Stress Assessment
         template_stress = AssessmentTemplate(
             name="Academic Stress & Burnout Assessment",
             description="Assessment for exam-related stress and burnout symptoms",
             category="stress",
-            created_by=counsellor1.user_id,
+            created_by=counsellors_s2[0].user_id,
             questions=[
                 {
                     "question_id": "q1",
@@ -570,377 +775,550 @@ def seed_database():
             }
         )
         
-        db.add_all([template_phq9, template_gad7, template_stress])
+        # Wellbeing Check
+        template_wellbeing = AssessmentTemplate(
+            name="Social-Emotional Wellbeing Check",
+            description="General wellbeing assessment for students",
+            category="wellbeing",
+            created_by=counsellors_s2[1].user_id,
+            questions=[
+                {
+                    "question_id": "q1",
+                    "question_text": "How happy do you feel at school?",
+                    "question_type": "rating_scale",
+                    "required": True,
+                    "min_value": 1,
+                    "max_value": 5,
+                    "answer_options": [
+                        {"option_id": str(i), "text": str(i), "value": i} for i in range(1, 6)
+                    ]
+                },
+                {
+                    "question_id": "q2",
+                    "question_text": "I have friends I can count on",
+                    "question_type": "multiple_choice",
+                    "required": True,
+                    "answer_options": [
+                        {"option_id": "strongly_disagree", "text": "Strongly Disagree", "value": 1},
+                        {"option_id": "disagree", "text": "Disagree", "value": 2},
+                        {"option_id": "neutral", "text": "Neutral", "value": 3},
+                        {"option_id": "agree", "text": "Agree", "value": 4},
+                        {"option_id": "strongly_agree", "text": "Strongly Agree", "value": 5}
+                    ]
+                }
+            ],
+            scoring_rules={
+                "total_score": "sum_all",
+                "low_wellbeing_threshold": 4
+            }
+        )
+        
+        db.add_all([template_phq9, template_gad7, template_stress, template_wellbeing])
         db.flush()
+        print(f"✅ Created 4 assessment templates")
         
-        # === ASSESSMENTS (Assigned to Classes) ===
+        # === ASSESSMENTS ===
+        print("\n📝 Creating assessments...")
+        assessments = []
         
-        # 1. Depression Screening for Grade 8-A
-        assessment_depression_8a = Assessment(
-            template_id=template_phq9.template_id,
-            school_id=school1.school_id,
-            class_id=class_8a.class_id,
-            title="Q1 Depression Screening - Grade 8A",
-            created_by=counsellor2.user_id,
-            notes="First quarter mental health screening for Grade 8A students"
-        )
+        # School 1 Assessments (1 per class for all 10 classes)
+        for class_obj in classes_s1:
+            counsellor = random.choice(counsellors_s1)
+            template = random.choice([template_phq9, template_gad7, template_stress, template_wellbeing])
+            
+            assessment = Assessment(
+                template_id=template.template_id,
+                school_id=school1.school_id,
+                class_id=class_obj.class_id,
+                title=f"{template.name} - {class_obj.name}",
+                created_by=counsellor.user_id,
+                notes=f"Assessment for {class_obj.name}"
+            )
+            assessments.append(assessment)
         
-        # 2. Anxiety Screening for Grade 5-A
-        assessment_anxiety_5a = Assessment(
-            template_id=template_gad7.template_id,
-            school_id=school1.school_id,
-            class_id=class_5a.class_id,
-            title="Anxiety Assessment - Grade 5A",
-            created_by=counsellor1.user_id,
-            notes="Routine anxiety screening for younger students"
-        )
+        # School 2 Assessments (1 per class for all 10 classes)
+        for class_obj in classes_s2:
+            counsellor = random.choice(counsellors_s2)
+            template = random.choice([template_phq9, template_gad7, template_stress, template_wellbeing])
+            
+            assessment = Assessment(
+                template_id=template.template_id,
+                school_id=school2.school_id,
+                class_id=class_obj.class_id,
+                title=f"{template.name} - {class_obj.name}",
+                created_by=counsellor.user_id,
+                notes=f"Assessment for {class_obj.name}"
+            )
+            assessments.append(assessment)
         
-        # 3. Exam Stress Assessment for Grade 12-A
-        assessment_stress_12a = Assessment(
-            template_id=template_stress.template_id,
-            school_id=school1.school_id,
-            class_id=class_12a.class_id,
-            title="Board Exam Stress Assessment",
-            created_by=counsellor1.user_id,
-            notes="Pre-board exam stress assessment"
-        )
-        
-        db.add_all([assessment_depression_8a, assessment_anxiety_5a, assessment_stress_12a])
+        db.add_all(assessments)
         db.flush()
+        print(f"✅ Created {len(assessments)} assessments")
         
         # === STUDENT RESPONSES ===
+        print("\n✍️ Creating student responses...")
+        responses = []
         
-        # Student responses for Depression Screening (Grade 8-A)
-        # Ethan (students[6]) - high risk
-        responses_ethan = [
-            StudentResponse(
-                assessment_id=assessment_depression_8a.assessment_id,
-                student_id=students[6].student_id,
-                question_id="q1",
-                question_text="Little interest or pleasure in doing things",
-                answer={"value": 3},
-                score=3.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_depression_8a.assessment_id,
-                student_id=students[6].student_id,
-                question_id="q2",
-                question_text="Feeling down, depressed, or hopeless",
-                answer={"value": 3},
-                score=3.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_depression_8a.assessment_id,
-                student_id=students[6].student_id,
-                question_id="q3",
-                question_text="Trouble falling or staying asleep, or sleeping too much",
-                answer={"value": 2},
-                score=2.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_depression_8a.assessment_id,
-                student_id=students[6].student_id,
-                question_id="q4",
-                question_text="Feeling tired or having little energy",
-                answer={"value": 3},
-                score=3.0,
-                completed_at=datetime.utcnow()
-            )
-        ]
+        # Create responses for some students in each assessment
+        for assessment in assessments:
+            # Get students from the class
+            class_students = [s for s in all_students if s.class_id == assessment.class_id]
+            # 40-60% of students complete the assessment (10-15 students per class of 25)
+            responding_students = random.sample(class_students, min(len(class_students), random.randint(10, 15)))
+            
+            for student in responding_students:
+                # Get template questions
+                template = next((t for t in [template_phq9, template_gad7, template_stress, template_wellbeing] 
+                               if t.template_id == assessment.template_id), None)
+                
+                if template:
+                    for question in template.questions:
+                        # Generate random response
+                        if question["question_type"] == "rating_scale":
+                            value = random.randint(question["min_value"], question["max_value"])
+                            score = float(value)
+                        elif question["question_type"] == "multiple_choice":
+                            option = random.choice(question["answer_options"])
+                            value = option["option_id"]
+                            score = float(option["value"])
+                        elif question["question_type"] == "yes_no":
+                            value = random.choice([True, False])
+                            score = 1.0 if value else 0.0
+                        else:
+                            value = 0
+                            score = 0.0
+                        
+                        response = StudentResponse(
+                            assessment_id=assessment.assessment_id,
+                            student_id=student.student_id,
+                            question_id=question["question_id"],
+                            question_text=question["question_text"],
+                            answer={"value": value},
+                            score=score,
+                            completed_at=datetime.utcnow() - timedelta(days=random.randint(1, 14))
+                        )
+                        responses.append(response)
         
-        # Ava (students[7]) - moderate
-        responses_ava = [
-            StudentResponse(
-                assessment_id=assessment_depression_8a.assessment_id,
-                student_id=students[7].student_id,
-                question_id="q1",
-                question_text="Little interest or pleasure in doing things",
-                answer={"value": 1},
-                score=1.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_depression_8a.assessment_id,
-                student_id=students[7].student_id,
-                question_id="q2",
-                question_text="Feeling down, depressed, or hopeless",
-                answer={"value": 2},
-                score=2.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_depression_8a.assessment_id,
-                student_id=students[7].student_id,
-                question_id="q3",
-                question_text="Trouble falling or staying asleep, or sleeping too much",
-                answer={"value": 1},
-                score=1.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_depression_8a.assessment_id,
-                student_id=students[7].student_id,
-                question_id="q4",
-                question_text="Feeling tired or having little energy",
-                answer={"value": 1},
-                score=1.0,
-                completed_at=datetime.utcnow()
-            )
-        ]
-        
-        # Student responses for Anxiety Screening (Grade 5-A)
-        # Alex (students[0]) - mild anxiety
-        responses_alex = [
-            StudentResponse(
-                assessment_id=assessment_anxiety_5a.assessment_id,
-                student_id=students[0].student_id,
-                question_id="q1",
-                question_text="Feeling nervous, anxious, or on edge",
-                answer={"value": 2},
-                score=2.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_anxiety_5a.assessment_id,
-                student_id=students[0].student_id,
-                question_id="q2",
-                question_text="Not being able to stop or control worrying",
-                answer={"value": 1},
-                score=1.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_anxiety_5a.assessment_id,
-                student_id=students[0].student_id,
-                question_id="q3",
-                question_text="Worrying too much about different things",
-                answer={"value": 2},
-                score=2.0,
-                completed_at=datetime.utcnow()
-            )
-        ]
-        
-        # Emma (students[1]) - minimal
-        responses_emma = [
-            StudentResponse(
-                assessment_id=assessment_anxiety_5a.assessment_id,
-                student_id=students[1].student_id,
-                question_id="q1",
-                question_text="Feeling nervous, anxious, or on edge",
-                answer={"value": 1},
-                score=1.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_anxiety_5a.assessment_id,
-                student_id=students[1].student_id,
-                question_id="q2",
-                question_text="Not being able to stop or control worrying",
-                answer={"value": 0},
-                score=0.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_anxiety_5a.assessment_id,
-                student_id=students[1].student_id,
-                question_id="q3",
-                question_text="Worrying too much about different things",
-                answer={"value": 1},
-                score=1.0,
-                completed_at=datetime.utcnow()
-            )
-        ]
-        
-        # Student responses for Exam Stress (Grade 12-A)
-        # Benjamin (students[12]) - high stress
-        responses_benjamin = [
-            StudentResponse(
-                assessment_id=assessment_stress_12a.assessment_id,
-                student_id=students[12].student_id,
-                question_id="q1",
-                question_text="How would you rate your current stress level about exams?",
-                answer={"value": 9},
-                score=9.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_stress_12a.assessment_id,
-                student_id=students[12].student_id,
-                question_id="q2",
-                question_text="How many hours of sleep do you get on average?",
-                answer={"value": "4_6"},
-                score=3.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_stress_12a.assessment_id,
-                student_id=students[12].student_id,
-                question_id="q3",
-                question_text="Do you experience physical symptoms (headaches, stomach issues, etc.)?",
-                answer={"value": True},
-                score=1.0,
-                completed_at=datetime.utcnow()
-            )
-        ]
-        
-        # Charlotte (students[13]) - moderate stress
-        responses_charlotte = [
-            StudentResponse(
-                assessment_id=assessment_stress_12a.assessment_id,
-                student_id=students[13].student_id,
-                question_id="q1",
-                question_text="How would you rate your current stress level about exams?",
-                answer={"value": 6},
-                score=6.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_stress_12a.assessment_id,
-                student_id=students[13].student_id,
-                question_id="q2",
-                question_text="How many hours of sleep do you get on average?",
-                answer={"value": "6_8"},
-                score=1.0,
-                completed_at=datetime.utcnow()
-            ),
-            StudentResponse(
-                assessment_id=assessment_stress_12a.assessment_id,
-                student_id=students[13].student_id,
-                question_id="q3",
-                question_text="Do you experience physical symptoms (headaches, stomach issues, etc.)?",
-                answer={"value": False},
-                score=0.0,
-                completed_at=datetime.utcnow()
-            )
-        ]
-        
-        all_responses = (responses_ethan + responses_ava + responses_alex + 
-                        responses_emma + responses_benjamin + responses_charlotte)
-        db.add_all(all_responses)
+        db.add_all(responses)
         db.flush()
+        print(f"✅ Created {len(responses)} student responses")
         
-        resource1 = Resource(
-            school_id=None,
-            type=ResourceType.VIDEO,
-            status=ResourceStatus.PUBLISHED,
-            title="Understanding Anxiety in Teens",
-            description="A comprehensive guide to recognizing and managing anxiety in adolescents.",
-            video_url="https://example.com/videos/anxiety-teens.mp4",
-            thumbnail_url="https://example.com/thumbnails/anxiety-teens.jpg",
-            author_name="Dr. Emily Chen",
-            author_id=counsellor1.user_id,
-            posted_date=datetime.utcnow() - timedelta(days=30),
-            duration_seconds=1200,
-            tags=["anxiety", "teens", "mental-health", "coping-strategies"],
-            category="anxiety",
-            target_audience=["counsellors", "teachers", "parents"],
-            view_count=245,
-            additional_metadata={"language": "en", "subtitles": ["en", "es"]}
-        )
+        # === RESOURCES ===
+        print("\n📚 Creating resources...")
+        resources = []
         
-        resource2 = Resource(
-            school_id=None,
-            type=ResourceType.VIDEO,
-            status=ResourceStatus.PUBLISHED,
-            title="Mindfulness Exercises for Students",
-            description="Simple mindfulness techniques that students can practice daily.",
-            video_url="https://example.com/videos/mindfulness-students.mp4",
-            thumbnail_url="https://example.com/thumbnails/mindfulness.jpg",
-            author_name="Sarah Johnson",
-            posted_date=datetime.utcnow() - timedelta(days=15),
-            duration_seconds=600,
-            tags=["mindfulness", "meditation", "stress-relief", "self-care"],
-            category="stress-management",
-            target_audience=["students", "teachers"],
-            view_count=189,
-            additional_metadata={"difficulty": "beginner"}
-        )
+        # Global Resources
+        global_resources_data = [
+            {
+                "type": ResourceType.VIDEO,
+                "title": "Understanding Anxiety in Teens",
+                "description": "A comprehensive guide to recognizing and managing anxiety in adolescents.",
+                "video_url": "https://example.com/videos/anxiety-teens.mp4",
+                "thumbnail_url": "https://example.com/thumbnails/anxiety-teens.jpg",
+                "author_name": "Dr. Emily Chen",
+                "duration_seconds": 1200,
+                "tags": ["anxiety", "teens", "mental-health", "coping-strategies"],
+                "category": "anxiety",
+                "target_audience": ["counsellors", "teachers", "parents"],
+                "view_count": 245
+            },
+            {
+                "type": ResourceType.VIDEO,
+                "title": "Mindfulness Exercises for Students",
+                "description": "Simple mindfulness techniques that students can practice daily.",
+                "video_url": "https://example.com/videos/mindfulness-students.mp4",
+                "thumbnail_url": "https://example.com/thumbnails/mindfulness.jpg",
+                "author_name": "Sarah Johnson",
+                "duration_seconds": 600,
+                "tags": ["mindfulness", "meditation", "stress-relief", "self-care"],
+                "category": "stress-management",
+                "target_audience": ["students", "teachers"],
+                "view_count": 189
+            },
+            {
+                "type": ResourceType.AUDIO,
+                "title": "Guided Meditation for Exam Stress",
+                "description": "A calming guided meditation to help students manage exam anxiety.",
+                "audio_url": "https://example.com/audio/exam-stress-meditation.mp3",
+                "thumbnail_url": "https://example.com/thumbnails/meditation-audio.jpg",
+                "author_name": "Lisa Anderson",
+                "duration_seconds": 480,
+                "tags": ["meditation", "exam-stress", "anxiety", "relaxation"],
+                "category": "stress-management",
+                "target_audience": ["students"],
+                "view_count": 156
+            },
+            {
+                "type": ResourceType.ARTICLE,
+                "title": "10 Ways to Support a Student in Crisis",
+                "description": "Practical strategies for teachers and counsellors to provide immediate support.",
+                "article_url": "https://example.com/articles/support-student-crisis",
+                "thumbnail_url": "https://example.com/thumbnails/crisis-support.jpg",
+                "author_name": "Dr. Amanda Foster",
+                "tags": ["crisis-intervention", "support", "teachers", "counselling"],
+                "category": "crisis-intervention",
+                "target_audience": ["counsellors", "teachers"],
+                "view_count": 567
+            }
+        ]
         
-        resource3 = Resource(
-            school_id=None,
-            type=ResourceType.AUDIO,
-            status=ResourceStatus.PUBLISHED,
-            title="Guided Meditation for Exam Stress",
-            description="A calming guided meditation to help students manage exam anxiety.",
-            audio_url="https://example.com/audio/exam-stress-meditation.mp3",
-            thumbnail_url="https://example.com/thumbnails/meditation-audio.jpg",
-            author_name="Lisa Anderson",
-            posted_date=datetime.utcnow() - timedelta(days=20),
-            duration_seconds=480,
-            tags=["meditation", "exam-stress", "anxiety", "relaxation"],
-            category="stress-management",
-            target_audience=["students"],
-            view_count=156,
-            additional_metadata={"format": "mp3", "bitrate": "320kbps"}
-        )
+        for data in global_resources_data:
+            resource = Resource(
+                school_id=None,
+                status=ResourceStatus.PUBLISHED,
+                posted_date=datetime.utcnow() - timedelta(days=random.randint(10, 60)),
+                **data
+            )
+            resources.append(resource)
         
-        resource4 = Resource(
-            school_id=None,
-            type=ResourceType.ARTICLE,
-            status=ResourceStatus.PUBLISHED,
-            title="10 Ways to Support a Student in Crisis",
-            description="Practical strategies for teachers and counsellors to provide immediate support.",
-            article_url="https://example.com/articles/support-student-crisis",
-            thumbnail_url="https://example.com/thumbnails/crisis-support.jpg",
-            author_name="Dr. Amanda Foster",
-            posted_date=datetime.utcnow() - timedelta(days=25),
-            tags=["crisis-intervention", "support", "teachers", "counselling"],
-            category="crisis-intervention",
-            target_audience=["counsellors", "teachers"],
-            view_count=567,
-            additional_metadata={"reading_time_minutes": 8}
-        )
+        # School 1 Specific Resources
+        for i in range(3):
+            resource = Resource(
+                school_id=school1.school_id,
+                type=random.choice([ResourceType.VIDEO, ResourceType.ARTICLE]),
+                status=ResourceStatus.PUBLISHED,
+                title=f"Lincoln High School - Resource {i+1}",
+                description=f"School-specific resource for Lincoln High School students and staff.",
+                video_url=f"https://example.com/videos/school1-resource{i+1}.mp4" if i % 2 == 0 else None,
+                article_url=f"https://example.com/articles/school1-resource{i+1}" if i % 2 == 1 else None,
+                thumbnail_url=f"https://example.com/thumbnails/school1-{i+1}.jpg",
+                author_name="School Counselling Team",
+                author_id=counsellors_s1[0].user_id,
+                posted_date=datetime.utcnow() - timedelta(days=random.randint(5, 40)),
+                duration_seconds=random.randint(300, 900) if i % 2 == 0 else None,
+                tags=["school-services", "counselling", "resources"],
+                category="school-specific",
+                target_audience=["students", "parents"],
+                view_count=random.randint(50, 150)
+            )
+            resources.append(resource)
         
-        resource5 = Resource(
-            school_id=school1.school_id,
-            type=ResourceType.VIDEO,
-            status=ResourceStatus.PUBLISHED,
-            title=f"{school1.name} - Counselling Services Overview",
-            description="Learn about the mental health support services available at our school.",
-            video_url="https://example.com/videos/school-services.mp4",
-            thumbnail_url="https://example.com/thumbnails/school-services.jpg",
-            author_name="School Counselling Team",
-            author_id=counsellor1.user_id,
-            posted_date=datetime.utcnow() - timedelta(days=60),
-            duration_seconds=420,
-            tags=["school-services", "counselling", "resources"],
-            category="school-specific",
-            target_audience=["students", "parents"],
-            view_count=89,
-            additional_metadata={"school_year": "2024-2025"}
-        )
+        # School 2 Specific Resources
+        for i in range(3):
+            resource = Resource(
+                school_id=school2.school_id,
+                type=random.choice([ResourceType.VIDEO, ResourceType.ARTICLE]),
+                status=ResourceStatus.PUBLISHED,
+                title=f"Washington Academy - Resource {i+1}",
+                description=f"School-specific resource for Washington Academy students and staff.",
+                video_url=f"https://example.com/videos/school2-resource{i+1}.mp4" if i % 2 == 0 else None,
+                article_url=f"https://example.com/articles/school2-resource{i+1}" if i % 2 == 1 else None,
+                thumbnail_url=f"https://example.com/thumbnails/school2-{i+1}.jpg",
+                author_name="Counseling Department",
+                author_id=counsellors_s2[0].user_id,
+                posted_date=datetime.utcnow() - timedelta(days=random.randint(5, 40)),
+                duration_seconds=random.randint(300, 900) if i % 2 == 0 else None,
+                tags=["school-services", "support", "resources"],
+                category="school-specific",
+                target_audience=["students", "parents"],
+                view_count=random.randint(50, 150)
+            )
+            resources.append(resource)
         
-        db.add_all([resource1, resource2, resource3, resource4, resource5])
+        db.add_all(resources)
+        db.flush()
+        print(f"✅ Created {len(resources)} resources")
+        
+        # === ACTIVITIES ===
+        print("\n🎯 Creating wellbeing activities...")
+        activities = []
+        
+        # School 1 Activities
+        activities_s1_data = [
+            {
+                "title": "Mindful Breathing Exercise",
+                "description": "A simple breathing exercise to help students calm their minds and reduce anxiety.",
+                "type": ActivityType.MINDFULNESS,
+                "duration": 10,
+                "target_grades": ["9", "10", "11", "12"],
+                "materials": ["Quiet space", "Optional: calming music", "Timer"],
+                "instructions": [
+                    "Have students sit comfortably with feet flat on the floor",
+                    "Ask them to close their eyes or look down gently",
+                    "Guide them to breathe in slowly through the nose for 4 counts",
+                    "Hold the breath for 4 counts",
+                    "Exhale slowly through the mouth for 6 counts",
+                    "Repeat for 5-10 cycles"
+                ],
+                "objectives": [
+                    "Reduce stress and anxiety",
+                    "Improve focus and concentration",
+                    "Develop self-regulation skills"
+                ]
+            },
+            {
+                "title": "Active Listening Practice",
+                "description": "Partner activity to develop active listening skills and empathy.",
+                "type": ActivityType.SOCIAL_SKILLS,
+                "duration": 20,
+                "target_grades": ["9", "10", "11"],
+                "materials": ["Timer", "Conversation prompt cards"],
+                "instructions": [
+                    "Pair students up with partners",
+                    "Explain the roles: Speaker and Listener",
+                    "Speaker shares for 3 minutes on a given topic",
+                    "Listener practices active listening",
+                    "Listener summarizes what they heard",
+                    "Switch roles and repeat"
+                ],
+                "objectives": [
+                    "Develop active listening skills",
+                    "Practice empathy and understanding",
+                    "Improve communication abilities"
+                ]
+            },
+            {
+                "title": "Emotion Thermometer",
+                "description": "Visual tool to help students identify and manage their emotional intensity.",
+                "type": ActivityType.EMOTIONAL_REGULATION,
+                "duration": 15,
+                "target_grades": ["9", "10", "11", "12"],
+                "materials": ["Emotion thermometer printouts", "Colored markers"],
+                "instructions": [
+                    "Introduce the emotion thermometer concept (0-10 scale)",
+                    "Discuss different emotions and their intensity levels",
+                    "Have students identify their current emotion",
+                    "Rate the intensity on their thermometer",
+                    "Discuss coping strategies for different levels"
+                ],
+                "objectives": [
+                    "Develop emotional awareness",
+                    "Learn to rate emotional intensity",
+                    "Practice self-regulation strategies"
+                ]
+            },
+            {
+                "title": "Growth Mindset Challenge",
+                "description": "Activities to help students develop a growth mindset and overcome challenges.",
+                "type": ActivityType.ACADEMIC_SUPPORT,
+                "duration": 40,
+                "target_grades": ["9", "10", "11", "12"],
+                "materials": ["Growth mindset posters", "Challenge cards", "Reflection journals"],
+                "instructions": [
+                    "Introduce fixed vs. growth mindset concepts",
+                    "Share examples of famous failures turned successes",
+                    "Have students identify a current challenge",
+                    "Reframe the challenge with growth mindset language",
+                    "Create action steps to overcome the challenge"
+                ],
+                "objectives": [
+                    "Develop growth mindset thinking",
+                    "Reframe academic challenges positively",
+                    "Build resilience and perseverance"
+                ]
+            },
+            {
+                "title": "Team Building Circle",
+                "description": "Group activity to build trust and connection among students.",
+                "type": ActivityType.TEAM_BUILDING,
+                "duration": 25,
+                "target_grades": ["9", "10", "11"],
+                "materials": ["Open space", "Optional: music"],
+                "instructions": [
+                    "Have students stand in a circle",
+                    "Each person shares something positive",
+                    "Practice active listening as a group",
+                    "Discuss teamwork and communication",
+                    "Reflect on the experience"
+                ],
+                "objectives": [
+                    "Practice teamwork and collaboration",
+                    "Build trust and connection",
+                    "Improve communication"
+                ]
+            }
+        ]
+        
+        for data in activities_s1_data:
+            activity = Activity(
+                school_id=school1.school_id,
+                created_by=counsellors_s1[0].user_id,
+                **data
+            )
+            activities.append(activity)
+        
+        # School 2 Activities
+        activities_s2_data = [
+            {
+                "title": "Body Scan Meditation",
+                "description": "Guided meditation to help students release tension throughout their body.",
+                "type": ActivityType.MINDFULNESS,
+                "duration": 15,
+                "target_grades": ["9", "10", "11", "12"],
+                "materials": ["Comfortable seating or mats", "Quiet space"],
+                "instructions": [
+                    "Have students lie down or sit comfortably",
+                    "Guide attention to the top of the head",
+                    "Slowly move awareness down through each body part",
+                    "Notice any tension or sensations without judgment",
+                    "End at the toes, then bring awareness back"
+                ],
+                "objectives": [
+                    "Increase body awareness",
+                    "Release physical tension",
+                    "Practice mindfulness"
+                ]
+            },
+            {
+                "title": "Compliment Circle",
+                "description": "Positive group activity where students practice giving genuine compliments.",
+                "type": ActivityType.SOCIAL_SKILLS,
+                "duration": 25,
+                "target_grades": ["9", "10", "11"],
+                "materials": ["Circle seating arrangement"],
+                "instructions": [
+                    "Arrange students in a circle",
+                    "Explain the importance of genuine compliments",
+                    "Each student takes a turn in the center",
+                    "Classmates share one genuine compliment",
+                    "Reflect on how it felt to give and receive"
+                ],
+                "objectives": [
+                    "Build self-esteem and confidence",
+                    "Practice giving positive feedback",
+                    "Strengthen classroom community"
+                ]
+            },
+            {
+                "title": "Coping Skills Toolbox",
+                "description": "Students create a personalized collection of coping strategies.",
+                "type": ActivityType.EMOTIONAL_REGULATION,
+                "duration": 30,
+                "target_grades": ["9", "10", "11", "12"],
+                "materials": ["Boxes or containers", "Art supplies", "Coping strategy cards"],
+                "instructions": [
+                    "Discuss what coping skills are and why they're important",
+                    "Brainstorm different types of coping strategies",
+                    "Have students decorate their toolbox",
+                    "Identify 5-10 personal coping strategies",
+                    "Create visual reminders for each strategy"
+                ],
+                "objectives": [
+                    "Identify personal coping strategies",
+                    "Create tangible emotional support tools",
+                    "Practice healthy stress management"
+                ]
+            },
+            {
+                "title": "Study Skills Workshop",
+                "description": "Practical workshop teaching effective study techniques and time management.",
+                "type": ActivityType.ACADEMIC_SUPPORT,
+                "duration": 45,
+                "target_grades": ["9", "10", "11", "12"],
+                "materials": ["Planners or calendars", "Study technique handouts"],
+                "instructions": [
+                    "Assess current study habits with a quiz",
+                    "Introduce various study techniques",
+                    "Demonstrate effective note-taking",
+                    "Practice time-blocking for assignments",
+                    "Create a personalized study schedule"
+                ],
+                "objectives": [
+                    "Learn effective study techniques",
+                    "Improve time management skills",
+                    "Reduce academic stress"
+                ]
+            },
+            {
+                "title": "Collaborative Art Project",
+                "description": "Group creates a unified piece of art teaching cooperation and shared vision.",
+                "type": ActivityType.TEAM_BUILDING,
+                "duration": 35,
+                "target_grades": ["9", "10", "11"],
+                "materials": ["Large canvas or paper", "Various art supplies"],
+                "instructions": [
+                    "Divide class into groups of 4-6",
+                    "Assign or let groups choose a theme",
+                    "Each person gets a section to work on",
+                    "Encourage discussion about overall vision",
+                    "Complete the project together"
+                ],
+                "objectives": [
+                    "Practice collaboration and compromise",
+                    "Appreciate diverse perspectives",
+                    "Work toward a shared goal"
+                ]
+            }
+        ]
+        
+        for data in activities_s2_data:
+            activity = Activity(
+                school_id=school2.school_id,
+                created_by=counsellors_s2[0].user_id,
+                **data
+            )
+            activities.append(activity)
+        
+        db.add_all(activities)
+        db.flush()
+        print(f"✅ Created {len(activities)} wellbeing activities")
+        
+        # === COMMIT ALL CHANGES ===
         db.commit()
         
-        print(f"\n{'='*60}")
-        print(f"DATABASE SEEDED SUCCESSFULLY!")
-        print(f"{'='*60}")
-        print(f"✅ 2 schools, 8 staff, 5 classes, {len(students)} students")
-        print(f"✅ 4 cases with 6 journal entries")
-        print(f"✅ 5 observations")
-        print(f"✅ 3 assessment templates, 3 assessments, {len(all_responses)} student responses")
-        print(f"✅ 5 resources")
-        print(f"\n{'='*60}")
-        print(f"LOGIN CREDENTIALS:")
-        print(f"{'='*60}")
-        print(f"Email: counsellor1@greenwood.edu")
-        print(f"Password: password123")
-        print(f"\n{'='*60}")
-        print(f"KEY IDs:")
-        print(f"{'='*60}")
-        print(f"School ID: {school1.school_id}")
-        print(f"Template PHQ-9: {template_phq9.template_id}")
-        print(f"Template GAD-7: {template_gad7.template_id}")
-        print(f"Assessment Depression 8A: {assessment_depression_8a.assessment_id}")
-        print(f"Assessment Anxiety 5A: {assessment_anxiety_5a.assessment_id}")
-        print(f"Assessment Stress 12A: {assessment_stress_12a.assessment_id}")
-        print(f"{'='*60}\n")
+        # === PRINT SUMMARY ===
+        print("\n" + "="*70)
+        print("DATABASE SEEDED SUCCESSFULLY!")
+        print("="*70)
+        print(f"\n📊 SUMMARY:")
+        print(f"  ✅ 2 schools")
+        print(f"  ✅ 2 principals")
+        print(f"  ✅ 12 counsellors (6 per school)")
+        print(f"  ✅ 24 teachers (12 per school)")
+        print(f"  ✅ {len(parents_s1) + len(parents_s2)} parents ({len(parents_s1)} + {len(parents_s2)})")
+        print(f"  ✅ {len(classes_s1) + len(classes_s2)} classes ({len(classes_s1)} + {len(classes_s2)})")
+        print(f"  ✅ {len(all_students)} students ({len(students_s1)} + {len(students_s2)})")
+        print(f"  ✅ {len(cases)} cases")
+        print(f"  ✅ {len(journal_entries)} journal entries")
+        print(f"  ✅ {len(observations)} observations")
+        print(f"  ✅ 4 assessment templates")
+        print(f"  ✅ {len(assessments)} assessments")
+        print(f"  ✅ {len(responses)} student responses")
+        print(f"  ✅ {len(resources)} resources")
+        print(f"  ✅ {len(activities)} wellbeing activities")
+        
+        print(f"\n" + "="*70)
+        print(f"SCHOOL DETAILS:")
+        print("="*70)
+        print(f"\n1. {school1.name} (ID: {school1.school_id})")
+        print(f"   📍 Location: {school1.city}, {school1.state}")
+        print(f"   👥 Staff: 1 Principal, 6 Counsellors, 12 Teachers, {len(parents_s1)} Parents")
+        print(f"   📚 Classes: {len(classes_s1)} (25 students each)")
+        print(f"   👨‍🎓 Students: {len(students_s1)}")
+        print(f"   📋 Cases: {case_count_s1}")
+        print(f"   👁️ Observations: {obs_count_s1}")
+        
+        print(f"\n2. {school2.name} (ID: {school2.school_id})")
+        print(f"   📍 Location: {school2.city}, {school2.state}")
+        print(f"   👥 Staff: 1 Principal, 6 Counsellors, 12 Teachers, {len(parents_s2)} Parents")
+        print(f"   📚 Classes: {len(classes_s2)} (25 students each)")
+        print(f"   👨‍🎓 Students: {len(students_s2)}")
+        print(f"   📋 Cases: {case_count_s2}")
+        print(f"   👁️ Observations: {obs_count_s2}")
+        
+        print(f"\n" + "="*70)
+        print(f"LOGIN CREDENTIALS (Password: password123):")
+        print("="*70)
+        print(f"\n🏫 School 1 - {school1.name}:")
+        print(f"   Principal: principal@lincoln.edu")
+        print(f"   Counsellor: counsellor1@lincoln.edu")
+        print(f"   Teacher: teacher1@lincoln.edu")
+        print(f"   Parent: {parents_s1[0].email if parents_s1 else 'N/A'}")
+        
+        print(f"\n🏫 School 2 - {school2.name}:")
+        print(f"   Principal: principal@washington.edu")
+        print(f"   Counsellor: counsellor1@washington.edu")
+        print(f"   Teacher: teacher1@washington.edu")
+        print(f"   Parent: {parents_s2[0].email if parents_s2 else 'N/A'}")
+        
+        print(f"\n" + "="*70)
+        print(f"✨ Database seeding completed successfully!")
+        print("="*70 + "\n")
+        
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
         db.rollback()
         raise
     finally:

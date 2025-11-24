@@ -254,6 +254,7 @@ class AssessmentListResponse(BaseModel):
     class_id: Optional[UUID] = None
     class_name: Optional[str] = None
     title: Optional[str] = None
+    category: Optional[str] = None
     created_by: UUID
     created_at: datetime
     notes: Optional[str] = None
@@ -269,6 +270,7 @@ class AssessmentListResponse(BaseModel):
                 "class_id": "8f3c4567-e89b-12d3-a456-426614174033",
                 "class_name": "Grade 8-A",
                 "title": "Q1 Depression Screening - Grade 8A",
+                "category": "depression",
                 "created_by": "123e4567-e89b-12d3-a456-426614174021",
                 "created_at": "2024-10-24T15:30:00Z",
                 "notes": "First quarter mental health screening"
@@ -319,10 +321,13 @@ class AssessmentResponse(BaseModel):
     assessment_id: UUID
     template_id: UUID
     template: Optional[TemplateInfo] = None
+    template_name: Optional[str] = None
     school_id: UUID
     class_id: Optional[UUID] = None
     class_obj: Optional[ClassInfo] = None
+    class_name: Optional[str] = None
     title: Optional[str] = None
+    category: Optional[str] = None
     created_by: UUID
     creator: CreatorInfo
     notes: Optional[str] = None

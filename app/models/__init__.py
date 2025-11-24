@@ -14,6 +14,10 @@ from app.models.goal import Goal
 from app.models.daily_booster import DailyBooster
 from app.models.calendar_event import CalendarEvent
 from app.models.session_note import SessionNote
+from app.models.webinar import Webinar
+from app.models.webinar_registration import WebinarRegistration
+from app.models.therapist import Therapist
+from app.models.therapist_booking import TherapistBooking
 
 __all__ = [
     "School",
@@ -34,5 +38,10 @@ __all__ = [
     "Goal",
     "DailyBooster",
     "CalendarEvent",
-    "SessionNote"
+    "SessionNote",
+    "Webinar",
+    "WebinarRegistration",
+    "Therapist",
+    "TherapistBooking"
 ]
+

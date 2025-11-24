@@ -42,7 +42,20 @@ async def create_class(
     db.add(class_obj)
     db.commit()
     db.refresh(class_obj)
-    return success_response(class_obj)
+    
+    # Serialize to dictionary
+    class_dict = {
+        "class_id": str(class_obj.class_id),
+        "school_id": str(class_obj.school_id),
+        "name": class_obj.name,
+        "grade": class_obj.grade,
+        "section": class_obj.section,
+        "academic_year": class_obj.academic_year,
+        "teacher_id": str(class_obj.teacher_id) if class_obj.teacher_id else None,
+        "capacity": class_obj.capacity,
+        "additional_info": class_obj.additional_info
+    }
+    return success_response(class_dict)
 
 @router.get("/")
 async def list_classes(
@@ -61,7 +74,24 @@ async def list_classes(
     if section:
         query = query.filter(Class.section == section)
     classes = query.offset(skip).limit(limit).all()
-    return success_response(classes)
+    
+    # Serialize classes to dictionaries to avoid JSON serialization issues with relationships
+    classes_data = []
+    for class_obj in classes:
+        class_dict = {
+            "class_id": str(class_obj.class_id),
+            "school_id": str(class_obj.school_id),
+            "name": class_obj.name,
+            "grade": class_obj.grade,
+            "section": class_obj.section,
+            "academic_year": class_obj.academic_year,
+            "teacher_id": str(class_obj.teacher_id) if class_obj.teacher_id else None,
+            "capacity": class_obj.capacity,
+            "additional_info": class_obj.additional_info
+        }
+        classes_data.append(class_dict)
+    
+    return success_response(classes_data)
 
 @router.get("/{class_id}")
 async def get_class(
@@ -73,7 +103,20 @@ async def get_class(
     ).filter(Class.class_id == class_id).first()
     if not class_obj:
         raise HTTPException(status_code=404, detail="Class not found")
-    return success_response(class_obj)
+    
+    # Serialize to dictionary
+    class_dict = {
+        "class_id": str(class_obj.class_id),
+        "school_id": str(class_obj.school_id),
+        "name": class_obj.name,
+        "grade": class_obj.grade,
+        "section": class_obj.section,
+        "academic_year": class_obj.academic_year,
+        "teacher_id": str(class_obj.teacher_id) if class_obj.teacher_id else None,
+        "capacity": class_obj.capacity,
+        "additional_info": class_obj.additional_info
+    }
+    return success_response(class_dict)
 
 @router.patch("/{class_id}")
 async def update_class(
@@ -105,7 +148,20 @@ async def update_class(
 
     db.commit()
     db.refresh(class_obj)
-    return success_response(class_obj)
+    
+    # Serialize to dictionary
+    class_dict = {
+        "class_id": str(class_obj.class_id),
+        "school_id": str(class_obj.school_id),
+        "name": class_obj.name,
+        "grade": class_obj.grade,
+        "section": class_obj.section,
+        "academic_year": class_obj.academic_year,
+        "teacher_id": str(class_obj.teacher_id) if class_obj.teacher_id else None,
+        "capacity": class_obj.capacity,
+        "additional_info": class_obj.additional_info
+    }
+    return success_response(class_dict)
 
 @router.delete("/{class_id}")
 async def delete_class(

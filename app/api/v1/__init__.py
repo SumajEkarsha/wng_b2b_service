@@ -3,7 +3,7 @@ from app.api.v1.endpoints import (
     auth, users, cases, students, observations, 
     assessments, schools, classes, teachers, counsellors, school_admin, resources,
     calendar_events, consent_records, goals, ai_recommendations, risk_alerts,
-    activities, daily_boosters, session_notes, templates
+    activities, daily_boosters, session_notes, templates, webinars, therapists
 )
 
 api_router = APIRouter()
@@ -36,3 +36,7 @@ api_router.include_router(consent_records.router, prefix="/consent-records", tag
 api_router.include_router(activities.router, prefix="/activities", tags=["activities"])
 api_router.include_router(daily_boosters.router, prefix="/daily-boosters", tags=["daily-boosters"])
 api_router.include_router(calendar_events.router, prefix="/calendar-events", tags=["calendar-events"])
+
+# Professional development and marketplace endpoints
+api_router.include_router(webinars.router, prefix="/webinars", tags=["webinars"])
+api_router.include_router(therapists.router, prefix="/therapists", tags=["therapists"])

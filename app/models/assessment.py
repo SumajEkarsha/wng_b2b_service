@@ -42,6 +42,7 @@ class Assessment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     title = Column(String(200), nullable=True)
     notes = Column(Text, nullable=True)
+    category = Column(String(100), nullable=True)  # e.g., "depression", "anxiety", "behavioral"
     excluded_students = Column(ARRAY(UUID(as_uuid=True)), nullable=True, default=[])  # Students excluded from this assessment
 
     # Relationships

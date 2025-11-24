@@ -44,3 +44,5 @@ class User(Base):
     session_notes = relationship("SessionNote", back_populates="counsellor")
     risk_alerts_assigned = relationship("RiskAlert", foreign_keys="RiskAlert.assigned_to", back_populates="assigned_user")
     ai_recommendations_reviewed = relationship("AIRecommendation", foreign_keys="AIRecommendation.reviewed_by", back_populates="reviewer")
+    webinar_registrations = relationship("WebinarRegistration", back_populates="user")
+    therapist_bookings = relationship("TherapistBooking", back_populates="user")

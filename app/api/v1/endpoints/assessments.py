@@ -75,6 +75,7 @@ def build_assessment_list_response(assessment: Assessment) -> Dict[str, Any]:
         "class_id": assessment.class_id,
         "class_name": assessment.class_obj.name if assessment.class_obj else None,
         "title": assessment.title,
+        "category": assessment.category or (assessment.template.category if assessment.template else None),
         "created_by": assessment.created_by,
         "created_at": assessment.created_at,
         "notes": assessment.notes
@@ -230,6 +231,7 @@ async def create_assessment(
         school_id=assessment_data.school_id,
         class_id=assessment_data.class_id,
         title=assessment_data.title,
+        category=assessment_data.category,
         created_by=assessment_data.created_by,
         notes=assessment_data.notes
     )
@@ -416,10 +418,12 @@ async def get_assessment(
             "category": assessment.template.category,
             "questions": assessment.template.questions
         },
+        "template_name": assessment.template.name,
         "school_id": assessment.school_id,
         "class_id": assessment.class_id,
         "class_name": assessment.class_obj.name if assessment.class_obj else None,
         "title": assessment.title,
+        "category": assessment.category or assessment.template.category,
         "created_by": assessment.created_by,
         "created_at": assessment.created_at,
         "notes": assessment.notes,

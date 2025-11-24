@@ -54,3 +54,5 @@ class Student(Base):
     ai_recommendations = relationship("AIRecommendation", back_populates="student")
     consent_records = relationship("ConsentRecord", back_populates="student")
     calendar_events = relationship("CalendarEvent", back_populates="student")
+    therapist_bookings = relationship("TherapistBooking", back_populates="student")
+

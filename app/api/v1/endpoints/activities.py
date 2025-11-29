@@ -17,14 +17,26 @@ def get_activities(
     limit: int = 100,
     school_id: UUID = None,
     activity_type: ActivityType = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Get all activities with optional filtering"""
     query = db.query(Activity)
+    
+    # Filter by school
     if school_id:
         query = query.filter(Activity.school_id == school_id)
+    
+    # Filter by type
     if activity_type:
         query = query.filter(Activity.type == activity_type)
+        
+    # Role-based access control
+    # If user is NOT a counselor or admin, hide counselor-only activities
+    from app.models.user import UserRole
+    if current_user.role not in [UserRole.COUNSELLOR, UserRole.ADMIN]:
+        query = query.filter(Activity.is_counselor_only == False)
+        
     return query.offset(skip).limit(limit).all()
 
 

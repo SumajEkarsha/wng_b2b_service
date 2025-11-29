@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, Integer, ForeignKey, DateTime, Enum as SQLEnum, ARRAY
+from sqlalchemy import Column, String, Text, Integer, ForeignKey, DateTime, Enum as SQLEnum, ARRAY, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -7,11 +7,10 @@ import enum
 from app.core.database import Base
 
 class ActivityType(str, enum.Enum):
-    MINDFULNESS = "MINDFULNESS"
-    SOCIAL_SKILLS = "SOCIAL_SKILLS"
-    EMOTIONAL_REGULATION = "EMOTIONAL_REGULATION"
-    ACADEMIC_SUPPORT = "ACADEMIC_SUPPORT"
-    TEAM_BUILDING = "TEAM_BUILDING"
+    PHYSICAL_DEVELOPMENT = "PHYSICAL_DEVELOPMENT"
+    COGNITIVE_DEVELOPMENT = "COGNITIVE_DEVELOPMENT"
+    SOCIAL_EMOTIONAL_DEVELOPMENT = "SOCIAL_EMOTIONAL_DEVELOPMENT"
+    LANGUAGE_COMMUNICATION_DEVELOPMENT = "LANGUAGE_COMMUNICATION_DEVELOPMENT"
 
 class Activity(Base):
     __tablename__ = "activities"
@@ -26,6 +25,8 @@ class Activity(Base):
     materials = Column(ARRAY(String), nullable=True)
     instructions = Column(ARRAY(Text), nullable=True)
     objectives = Column(ARRAY(String), nullable=True)
+    diagnosis = Column(ARRAY(String), nullable=True)  # Special needs and mental health categories
+    is_counselor_only = Column(Boolean, default=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

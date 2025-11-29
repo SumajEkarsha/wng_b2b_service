@@ -14,6 +14,7 @@ class ActivityBase(BaseModel):
     materials: Optional[List[str]] = None
     instructions: Optional[List[str]] = None
     objectives: Optional[List[str]] = None
+    diagnosis: Optional[List[str]] = None
 
 
 class ActivityCreate(ActivityBase):
@@ -29,6 +30,7 @@ class ActivityUpdate(BaseModel):
     materials: Optional[List[str]] = None
     instructions: Optional[List[str]] = None
     objectives: Optional[List[str]] = None
+    diagnosis: Optional[List[str]] = None
 
 
 class Activity(ActivityBase):

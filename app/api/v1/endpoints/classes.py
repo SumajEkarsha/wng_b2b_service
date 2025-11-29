@@ -64,6 +64,7 @@ async def list_classes(
     limit: int = 100,
     grade: str = None,
     section: str = None,
+    teacher_id: UUID = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(Class).options(
@@ -73,6 +74,8 @@ async def list_classes(
         query = query.filter(Class.grade == grade)
     if section:
         query = query.filter(Class.section == section)
+    if teacher_id:
+        query = query.filter(Class.teacher_id == teacher_id)
     classes = query.offset(skip).limit(limit).all()
     
     # Serialize classes to dictionaries to avoid JSON serialization issues with relationships

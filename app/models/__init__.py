@@ -18,6 +18,8 @@ from app.models.webinar import Webinar
 from app.models.webinar_registration import WebinarRegistration
 from app.models.therapist import Therapist
 from app.models.therapist_booking import TherapistBooking
+from app.models.activity_assignment import ActivityAssignment
+from app.models.activity_submission import ActivitySubmission
 
 __all__ = [
     "School",
@@ -42,6 +44,8 @@ __all__ = [
     "Webinar",
     "WebinarRegistration",
     "Therapist",
-    "TherapistBooking"
+    "TherapistBooking",
+    "ActivityAssignment",
+    "ActivitySubmission"
 ]
 

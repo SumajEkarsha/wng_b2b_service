@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, JSON, ForeignKey, DateTime, Enum as SQLEnum, Integer, ARRAY
+from sqlalchemy import Column, String, Text, JSON, ForeignKey, DateTime, Enum as SQLEnum, Integer, ARRAY, Boolean, Numeric
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -42,6 +42,12 @@ class Resource(Base):
     target_audience = Column(ARRAY(String), nullable=True)
     view_count = Column(Integer, default=0)
     additional_metadata = Column(JSON, nullable=True)
+    
+    # Pricing fields
+    is_free = Column(Boolean, nullable=False, default=True)
+    price = Column(Numeric(10, 2), nullable=True)  # Price with 2 decimal places
+    currency = Column(String(3), nullable=True, default="USD")  # ISO 4217 currency code
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

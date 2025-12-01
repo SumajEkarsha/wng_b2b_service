@@ -41,6 +41,9 @@ class ResourceCreate(BaseModel):
     category: Optional[str] = Field(default=None, description="Primary category")
     target_audience: Optional[List[str]] = Field(default=None, description="Target audience (e.g., students, parents, teachers)")
     additional_metadata: Optional[ResourceMetadata] = Field(default=None, description="Additional metadata")
+    is_free: bool = Field(default=True, description="Whether resource is free or paid")
+    price: Optional[float] = Field(default=None, ge=0, description="Price in USD (null if free)")
+    currency: Optional[str] = Field(default="USD", description="Currency code (ISO 4217)")
     
     class Config:
         json_schema_extra = {
@@ -88,6 +91,9 @@ class ResourceUpdate(BaseModel):
     category: Optional[str] = Field(default=None, description="Primary category")
     target_audience: Optional[List[str]] = Field(default=None, description="Target audience")
     additional_metadata: Optional[ResourceMetadata] = Field(default=None, description="Additional metadata")
+    is_free: Optional[bool] = Field(default=None, description="Whether resource is free or paid")
+    price: Optional[float] = Field(default=None, ge=0, description="Price in USD")
+    currency: Optional[str] = Field(default=None, description="Currency code")
     
     class Config:
         json_schema_extra = {
@@ -117,6 +123,9 @@ class ResourceResponse(BaseModel):
     target_audience: Optional[List[str]] = None
     view_count: int
     additional_metadata: Optional[dict] = None
+    is_free: bool
+    price: Optional[float] = None
+    currency: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     
@@ -164,6 +173,8 @@ class ResourceListResponse(BaseModel):
     tags: Optional[List[str]] = None
     category: Optional[str] = None
     view_count: int
+    is_free: bool
+    price: Optional[float] = None
     
     class Config:
         from_attributes = True

@@ -1,3 +1,10 @@
+# Temporary/development scripts
+scripts/seed*.py
+scripts/check_db.py
+add_*.py
+seed_*.py
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -10,12 +17,14 @@ ENV/
 .env
 *.db
 *.sqlite3
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swoqlite3
 alembic/versions/*.pyc
 .DS_Store
-.idea/
-.vscode/
-*.log
-
 # Seed scripts
 scripts/seed*.py
 scripts/check_db.py

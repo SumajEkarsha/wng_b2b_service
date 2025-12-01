@@ -20,6 +20,7 @@ class AssessmentTemplate(Base):
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
     category = Column(String(100), nullable=True)  # e.g., "depression", "anxiety", "behavioral"
+    thumbnail_url = Column(String, nullable=True)
     questions = Column(JSON, nullable=False)  # Array of question objects
     scoring_rules = Column(JSON, nullable=True)  # Rules for calculating scores
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)

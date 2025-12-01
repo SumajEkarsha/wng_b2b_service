@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_
 from typing import List, Optional
 from uuid import UUID
@@ -12,6 +12,7 @@ from app.schemas.therapist import (
     TherapistCreate, TherapistUpdate, TherapistResponse, TherapistListResponse,
     TherapistBookingCreate, TherapistBookingUpdate, TherapistBookingResponse
 )
+from app.models.user import User, UserRole
 
 router = APIRouter()
 
@@ -73,6 +74,8 @@ async def list_therapists(
         "page_size": limit
     })
 
+
+
 @router.get("/my-bookings")
 async def get_my_bookings(
     user_id: UUID,  # TODO: Get from auth token
@@ -85,7 +88,7 @@ async def get_my_bookings(
     if status:
         query = query.filter(TherapistBooking.status == status)
     
-    bookings = query.order_by(TherapistBooking.appointment_date.desc()).all()
+    bookings = query.options(joinedload(TherapistBooking.therapist)).order_by(TherapistBooking.appointment_date.desc()).all()
     
     return success_response({"bookings": bookings})
 
@@ -152,34 +155,71 @@ async def book_therapist(
     
     if therapist.availability_status == AvailabilityStatus.UNAVAILABLE:
         raise HTTPException(status_code=400, detail="Therapist is currently unavailable")
-    
+
+    # Auto-register therapist as counselor if not already registered
+    # First, get the booking user to find their school
+    booker = db.query(User).filter(User.user_id == user_id).first()
+    if booker and booker.school_id:
+        # Check if this therapist is already a counselor at this school
+        # We check by looking for a counselor with this therapist_id in their profile
+        # Note: Using cast to String because User.profile is JSON type, not JSONB, so contains() might fail
+        from sqlalchemy import cast, String
+        
+        existing_counsellor = db.query(User).filter(
+            User.school_id == booker.school_id,
+            User.role == UserRole.COUNSELLOR,
+            cast(User.profile, String).like(f'%"marketplace_therapist_id": "{str(therapist_id)}"%')
+        ).first()
+
+        if not existing_counsellor:
+            # Register the therapist as a counselor
+            from app.core.security import get_password_hash
+            import uuid
+            
+            # Create a unique email for the counselor at this school
+            # Format: therapist.firstname.lastname.schoolid@calmbridge.edu (mock)
+            safe_name = therapist.name.lower().replace(" ", ".").replace("dr.", "").replace("ms.", "").replace("mr.", "").strip(".")
+            mock_email = f"{safe_name}.{str(booker.school_id)[:8]}@calmbridge.edu"
+            
+            # Check if email exists (unlikely with school ID suffix but good to be safe)
+            if db.query(User).filter(User.email == mock_email).first():
+                mock_email = f"{safe_name}.{str(booker.school_id)[:8]}.{str(uuid.uuid4())[:4]}@calmbridge.edu"
+
+            new_counsellor = User(
+                email=mock_email,
+                hashed_password=get_password_hash("Welcome123!"), # Default password
+                display_name=therapist.name,
+                role=UserRole.COUNSELLOR,
+                school_id=booker.school_id,
+                profile={
+                    "bio": therapist.bio,
+                    "specializations": [therapist.specialty] + (therapist.areas_of_expertise or []),
+                    "languages": therapist.languages,
+                    "marketplace_therapist_id": str(therapist_id),
+                    "image_url": therapist.profile_image_url
+                },
+                availability={
+                    "status": "Available",
+                    "hours": "9:00 AM - 5:00 PM"
+                }
+            )
+            db.add(new_counsellor)
+            db.commit()
+            db.refresh(new_counsellor)
+            print(f"Auto-registered therapist {therapist.name} as counselor for school {booker.school_id}")
+
     # Create booking
     booking = TherapistBooking(
         therapist_id=therapist_id,
         user_id=user_id,
-        **booking_data.dict()
+        school_id=booker.school_id if booker else None,
+        **booking_data.dict(exclude={'therapist_id'})
     )
     db.add(booking)
     db.commit()
     db.refresh(booking)
     
     return success_response(booking)
-
-@router.get("/my-bookings")
-async def get_my_bookings(
-    user_id: UUID,  # TODO: Get from auth token
-    status: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    """Get current user's therapist bookings"""
-    query = db.query(TherapistBooking).filter(TherapistBooking.user_id == user_id)
-    
-    if status:
-        query = query.filter(TherapistBooking.status == status)
-    
-    bookings = query.order_by(TherapistBooking.appointment_date.desc()).all()
-    
-    return success_response({"bookings": bookings})
 
 @router.put("/bookings/{booking_id}")
 async def update_booking(

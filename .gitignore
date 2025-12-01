@@ -15,3 +15,7 @@ alembic/versions/*.pyc
 .idea/
 .vscode/
 *.log
+
+# Seed scripts
+scripts/seed*.py
+scripts/check_db.py

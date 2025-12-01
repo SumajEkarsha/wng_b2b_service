@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, case, text
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from app.core.database import get_db
 from app.core.response import success_response
 from app.models.user import User, UserRole
@@ -105,7 +106,7 @@ async def get_school_overview(
 ):
     """Get comprehensive school overview dashboard"""
     
-    # Total counts
+    # 1. Total counts (Optimized: Single queries)
     total_students = db.query(Student).filter(Student.school_id == school_id).count()
     total_classes = db.query(Class).filter(Class.school_id == school_id).count()
     total_teachers = db.query(User).filter(
@@ -117,283 +118,264 @@ async def get_school_overview(
         User.role == UserRole.COUNSELLOR
     ).count()
     
-    # Get all students for this school to filter cases
-    student_ids = [s.student_id for s in db.query(Student.student_id).filter(Student.school_id == school_id).all()]
+    # 2. Case Statistics (Optimized: Aggregations)
+    # Join Case -> Student to filter by school_id directly in DB
+    case_stats = db.query(
+        func.count(Case.case_id).label('total'),
+        func.sum(case(
+            (Case.status != CaseStatus.CLOSED, 1), else_=0
+        )).label('active'),
+        func.sum(case(
+            ((Case.risk_level == RiskLevel.CRITICAL) & (Case.status != CaseStatus.CLOSED), 1), else_=0
+        )).label('critical'),
+        func.sum(case(
+            ((Case.risk_level == RiskLevel.HIGH) & (Case.status != CaseStatus.CLOSED), 1), else_=0
+        )).label('high'),
+        func.sum(case(
+            ((Case.risk_level == RiskLevel.MEDIUM) & (Case.status != CaseStatus.CLOSED), 1), else_=0
+        )).label('medium'),
+        func.sum(case(
+            ((Case.risk_level == RiskLevel.LOW) & (Case.status != CaseStatus.CLOSED), 1), else_=0
+        )).label('low')
+    ).join(Student, Case.student_id == Student.student_id)\
+     .filter(Student.school_id == school_id).first()
+
+    total_cases = case_stats.total or 0
+    active_cases = case_stats.active or 0
+    critical_cases = case_stats.critical or 0
+    high_risk_cases = case_stats.high or 0
+    medium_risk_cases = case_stats.medium or 0
+    low_risk_cases = case_stats.low or 0
     
-    # Cases statistics
-    total_cases = db.query(Case).filter(Case.student_id.in_(student_ids)).count()
-    active_cases = db.query(Case).filter(
-        Case.student_id.in_(student_ids),
-        Case.status != CaseStatus.CLOSED
-    ).count()
-    
-    # Cases by risk level (active only)
-    critical_cases = db.query(Case).filter(
-        Case.student_id.in_(student_ids),
-        Case.risk_level == RiskLevel.CRITICAL,
-        Case.status != CaseStatus.CLOSED
-    ).count()
-    
-    high_risk_cases = db.query(Case).filter(
-        Case.student_id.in_(student_ids),
-        Case.risk_level == RiskLevel.HIGH,
-        Case.status != CaseStatus.CLOSED
-    ).count()
-    
-    medium_risk_cases = db.query(Case).filter(
-        Case.student_id.in_(student_ids),
-        Case.risk_level == RiskLevel.MEDIUM,
-        Case.status != CaseStatus.CLOSED
-    ).count()
-    
-    low_risk_cases = db.query(Case).filter(
-        Case.student_id.in_(student_ids),
-        Case.risk_level == RiskLevel.LOW,
-        Case.status != CaseStatus.CLOSED
-    ).count()
-    
-    # Recent observations (last 30 days)
+    # 3. Recent Activity (Optimized)
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    recent_observations = db.query(Observation).filter(
-        Observation.student_id.in_(student_ids),
-        Observation.timestamp >= thirty_days_ago
-    ).count()
     
-    # === OPTIMIZED ASSESSMENT DATA ===
+    recent_observations = db.query(func.count(Observation.observation_id))\
+        .join(Student, Observation.student_id == Student.student_id)\
+        .filter(
+            Student.school_id == school_id,
+            Observation.timestamp >= thirty_days_ago
+        ).scalar() or 0
+
+    # 4. Assessment Analytics (Optimized)
     from app.models.assessment import StudentResponse, AssessmentTemplate
     
-    # Count recent distinct assessments (last 30 days)
-    recent_assessments_count = db.query(StudentResponse).filter(
-        StudentResponse.student_id.in_(student_ids),
-        StudentResponse.completed_at >= thirty_days_ago
-    ).distinct(StudentResponse.assessment_id).count() if student_ids else 0
-    
-    # Get all completed assessment responses with eager loading
-    all_completed_responses = db.query(StudentResponse).options(
-        joinedload(StudentResponse.assessment).joinedload(Assessment.template)
-    ).filter(
-        StudentResponse.student_id.in_(student_ids),
-        StudentResponse.completed_at.isnot(None)
-    ).all() if student_ids else []
-    
-    # Pre-load all students at once
-    students_map = {}
-    if student_ids:
-        students_list = db.query(Student).options(
-            joinedload(Student.class_obj)
-        ).filter(Student.student_id.in_(student_ids)).all()
-        students_map = {s.student_id: s for s in students_list}
-    
-    # Calculate assessment analytics
-    assessment_scores = []
-    assessment_by_category = {}
-    assessment_by_grade = {}
-    student_assessment_count = {}
-    
-    for response in all_completed_responses:
-        if response.score is not None:
-            assessment_scores.append(response.score)
+    # Recent assessments count
+    recent_assessments_count = db.query(func.count(func.distinct(StudentResponse.assessment_id)))\
+        .join(Student, StudentResponse.student_id == Student.student_id)\
+        .filter(
+            Student.school_id == school_id,
+            StudentResponse.completed_at >= thirty_days_ago
+        ).scalar() or 0
         
-        # Track by student
-        if response.student_id not in student_assessment_count:
-            student_assessment_count[response.student_id] = 0
-        student_assessment_count[response.student_id] += 1
-        
-        # Get assessment category from eager-loaded relationship
-        if response.assessment and response.assessment.template:
-            category = response.assessment.template.category or "General"
-            if category not in assessment_by_category:
-                assessment_by_category[category] = {"total_score": 0, "count": 0, "scores": []}
-            if response.score is not None:
-                assessment_by_category[category]["total_score"] += response.score
-                assessment_by_category[category]["count"] += 1
-                assessment_by_category[category]["scores"].append(response.score)
-        
-        # Track by grade using pre-loaded students
-        student = students_map.get(response.student_id)
-        if student and student.class_obj:
-            grade = student.class_obj.grade
-            if grade not in assessment_by_grade:
-                assessment_by_grade[grade] = {"total_score": 0, "count": 0, "scores": []}
-            if response.score is not None:
-                assessment_by_grade[grade]["total_score"] += response.score
-                assessment_by_grade[grade]["count"] += 1
-                assessment_by_grade[grade]["scores"].append(response.score)
-    
-    # Calculate statistics
-    avg_assessment_score = sum(assessment_scores) / len(assessment_scores) if assessment_scores else 0
-    students_assessed = len(student_assessment_count)
+    # Assessment Stats Aggregation
+    assessment_stats = db.query(
+        func.count(StudentResponse.response_id).label('total_responses'),
+        func.count(func.distinct(StudentResponse.student_id)).label('students_assessed'),
+        func.avg(StudentResponse.score).label('avg_score')
+    ).join(Student, StudentResponse.student_id == Student.student_id)\
+     .filter(
+         Student.school_id == school_id,
+         StudentResponse.completed_at.isnot(None)
+     ).first()
+     
+    students_assessed = assessment_stats.students_assessed or 0
+    avg_assessment_score = float(assessment_stats.avg_score or 0)
     students_not_assessed = total_students - students_assessed
     assessment_completion_rate = (students_assessed / total_students * 100) if total_students > 0 else 0
-    
-    # Category breakdown
-    category_breakdown = []
-    for category, data in assessment_by_category.items():
-        avg_score = data["total_score"] / data["count"] if data["count"] > 0 else 0
-        category_breakdown.append({
-            "category": category,
-            "average_score": round(avg_score, 2),
-            "total_assessments": data["count"]
-        })
-    
-    # Grade level breakdown
-    grade_breakdown = []
-    for grade, data in assessment_by_grade.items():
-        avg_score = data["total_score"] / data["count"] if data["count"] > 0 else 0
-        grade_breakdown.append({
-            "grade": grade,
-            "average_score": round(avg_score, 2),
-            "total_assessments": data["count"]
-        })
-    
-    # Sort by grade
+
+    # Category Breakdown (Optimized Group By)
+    category_stats = db.query(
+        AssessmentTemplate.category,
+        func.count(StudentResponse.response_id).label('count'),
+        func.avg(StudentResponse.score).label('avg_score')
+    ).select_from(StudentResponse)\
+     .join(Assessment, StudentResponse.assessment_id == Assessment.assessment_id)\
+     .join(AssessmentTemplate, Assessment.template_id == AssessmentTemplate.template_id)\
+     .join(Student, StudentResponse.student_id == Student.student_id)\
+     .filter(Student.school_id == school_id, StudentResponse.completed_at.isnot(None))\
+     .group_by(AssessmentTemplate.category).all()
+     
+    category_breakdown = [
+        {
+            "category": stat.category or "General",
+            "average_score": round(float(stat.avg_score or 0), 2),
+            "total_assessments": stat.count
+        }
+        for stat in category_stats
+    ]
+
+    # Grade Breakdown (Optimized Group By)
+    grade_stats = db.query(
+        Class.grade,
+        func.count(StudentResponse.response_id).label('count'),
+        func.avg(StudentResponse.score).label('avg_score')
+    ).select_from(StudentResponse)\
+     .join(Student, StudentResponse.student_id == Student.student_id)\
+     .join(Class, Student.class_id == Class.class_id)\
+     .filter(Student.school_id == school_id, StudentResponse.completed_at.isnot(None))\
+     .group_by(Class.grade).all()
+     
+    grade_breakdown = [
+        {
+            "grade": stat.grade,
+            "average_score": round(float(stat.avg_score or 0), 2),
+            "total_assessments": stat.count
+        }
+        for stat in grade_stats
+    ]
     grade_breakdown.sort(key=lambda x: x["grade"])
-    
-    # Trend analysis (compare last 30 days vs previous 30 days)
+
+    # Trend Analysis (Optimized)
     sixty_days_ago = datetime.utcnow() - timedelta(days=60)
-    previous_period_responses = db.query(StudentResponse).filter(
-        StudentResponse.student_id.in_(student_ids),
-        StudentResponse.completed_at >= sixty_days_ago,
-        StudentResponse.completed_at < thirty_days_ago
-    ).all() if student_ids else []
     
-    previous_scores = [r.score for r in previous_period_responses if r.score is not None]
-    previous_avg = sum(previous_scores) / len(previous_scores) if previous_scores else 0
-    
-    recent_period_responses = db.query(StudentResponse).filter(
-        StudentResponse.student_id.in_(student_ids),
-        StudentResponse.completed_at >= thirty_days_ago
-    ).all() if student_ids else []
-    
-    recent_scores = [r.score for r in recent_period_responses if r.score is not None]
-    recent_avg = sum(recent_scores) / len(recent_scores) if recent_scores else 0
+    # Calculate averages for two periods in one query using conditional aggregation
+    trend_stats = db.query(
+        func.avg(case(
+            ((StudentResponse.completed_at >= sixty_days_ago) & (StudentResponse.completed_at < thirty_days_ago), StudentResponse.score),
+            else_=None
+        )).label('prev_avg'),
+        func.avg(case(
+            (StudentResponse.completed_at >= thirty_days_ago, StudentResponse.score),
+            else_=None
+        )).label('curr_avg'),
+        func.count(case(
+            ((StudentResponse.completed_at >= sixty_days_ago) & (StudentResponse.completed_at < thirty_days_ago), 1),
+            else_=None
+        )).label('prev_count'),
+        func.count(case(
+            (StudentResponse.completed_at >= thirty_days_ago, 1),
+            else_=None
+        )).label('curr_count')
+    ).join(Student, StudentResponse.student_id == Student.student_id)\
+     .filter(Student.school_id == school_id).first()
+     
+    previous_avg = float(trend_stats.prev_avg or 0)
+    recent_avg = float(trend_stats.curr_avg or 0)
     
     trend = "improving" if recent_avg > previous_avg else "declining" if recent_avg < previous_avg else "stable"
     trend_change = round(((recent_avg - previous_avg) / previous_avg * 100), 2) if previous_avg > 0 else 0
-    
+
     # At-risk percentage
     at_risk_students = critical_cases + high_risk_cases + medium_risk_cases
     at_risk_percent = (at_risk_students / total_students * 100) if total_students > 0 else 0
+
+    # 5. Monthly Trends (Optimized: Single Query Grouped by Month)
+    from sqlalchemy import text
     
-    # Calculate monthly trends (last 6 months)
-    from dateutil.relativedelta import relativedelta
-    monthly_trends = []
-    for i in range(5, -1, -1):  # Last 6 months
-        month_start = datetime.utcnow() - relativedelta(months=i)
-        month_end = month_start + relativedelta(months=1)
-        month_name = month_start.strftime("%b %Y")
-        
-        # Cases opened/closed in this month
-        month_cases_opened = db.query(Case).filter(
-            Case.student_id.in_(student_ids),
-            Case.created_at >= month_start,
-            Case.created_at < month_end
-        ).count() if student_ids else 0
-        
-        month_cases_closed = db.query(Case).filter(
-            Case.student_id.in_(student_ids),
-            Case.closed_at >= month_start,
-            Case.closed_at < month_end
-        ).count() if student_ids else 0
-        
-        # Assessments completed in this month
-        month_assessments = db.query(StudentResponse).filter(
-            StudentResponse.student_id.in_(student_ids),
-            StudentResponse.completed_at >= month_start,
-            StudentResponse.completed_at < month_end
-        ).count() if student_ids else 0
-        
-        # Average wellbeing score for this month
-        month_responses = db.query(StudentResponse).filter(
-            StudentResponse.student_id.in_(student_ids),
-            StudentResponse.completed_at >= month_start,
-            StudentResponse.completed_at < month_end,
-            StudentResponse.score.isnot(None)
-        ).all() if student_ids else []
-        
-        month_scores = [r.score for r in month_responses if r.score is not None]
-        month_avg_score = sum(month_scores) / len(month_scores) if month_scores else 0
-        
-        monthly_trends.append({
-            "month": month_name,
-            "wellbeingIndex": round(month_avg_score, 1),
-            "casesOpened": month_cases_opened,
-            "casesClosed": month_cases_closed,
-            "assessmentsCompleted": month_assessments
-        })
+    # We'll use a recursive CTE or generate_series to ensure all months are present, 
+    # but for simplicity and DB compatibility, we'll query grouped data and merge in Python.
+    six_months_ago = datetime.utcnow() - relativedelta(months=5)
+    six_months_ago = six_months_ago.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
-    # Get class-level metrics with eager loading
-    classes = db.query(Class).options(
-        joinedload(Class.teacher)
-    ).filter(Class.school_id == school_id).all()
+    # Group Cases by Month
+    cases_trend = db.query(
+        func.date_trunc('month', Case.created_at).label('month'),
+        func.count(Case.case_id).label('opened'),
+        func.count(Case.closed_at).label('closed') # This is approximate as closed_at might be in different month
+    ).join(Student, Case.student_id == Student.student_id)\
+     .filter(Student.school_id == school_id, Case.created_at >= six_months_ago)\
+     .group_by(text('1')).all()
+     
+    # Better approach for closed cases: group by closed_at
+    cases_closed_trend = db.query(
+        func.date_trunc('month', Case.closed_at).label('month'),
+        func.count(Case.case_id).label('closed')
+    ).join(Student, Case.student_id == Student.student_id)\
+     .filter(Student.school_id == school_id, Case.closed_at >= six_months_ago)\
+     .group_by(text('1')).all()
+
+    # Group Assessments by Month
+    assessments_trend = db.query(
+        func.date_trunc('month', StudentResponse.completed_at).label('month'),
+        func.count(StudentResponse.response_id).label('count'),
+        func.avg(StudentResponse.score).label('avg_score')
+    ).join(Student, StudentResponse.student_id == Student.student_id)\
+     .filter(Student.school_id == school_id, StudentResponse.completed_at >= six_months_ago)\
+     .group_by(text('1')).all()
+
+    # Merge Data in Python
+    monthly_data = {}
     
-    # Pre-load all students with their classes
-    all_students_with_classes = db.query(Student).options(
-        joinedload(Student.class_obj)
-    ).filter(Student.school_id == school_id).all()
+    # Initialize last 6 months
+    for i in range(5, -1, -1):
+        month_date = datetime.utcnow() - relativedelta(months=i)
+        key = month_date.strftime("%Y-%m")
+        monthly_data[key] = {
+            "month": month_date.strftime("%b %Y"),
+            "wellbeingIndex": 0,
+            "casesOpened": 0,
+            "casesClosed": 0,
+            "assessmentsCompleted": 0
+        }
+
+    for r in cases_trend:
+        if r.month:
+            key = r.month.strftime("%Y-%m")
+            if key in monthly_data:
+                monthly_data[key]["casesOpened"] = r.opened
+
+    for r in cases_closed_trend:
+        if r.month:
+            key = r.month.strftime("%Y-%m")
+            if key in monthly_data:
+                monthly_data[key]["casesClosed"] = r.closed
+
+    for r in assessments_trend:
+        if r.month:
+            key = r.month.strftime("%Y-%m")
+            if key in monthly_data:
+                monthly_data[key]["assessmentsCompleted"] = r.count
+                monthly_data[key]["wellbeingIndex"] = round(float(r.avg_score or 0), 1)
+
+    monthly_trends = list(monthly_data.values())
+
+    # 6. Class Metrics (Optimized: Single Query with Joins)
+    # This is complex to do in one query due to multiple aggregations. 
+    # We will fetch class info + at_risk count + avg score in separate grouped queries and merge.
     
-    # Group students by class
-    students_by_class = {}
-    for student in all_students_with_classes:
-        if student.class_id:
-            if student.class_id not in students_by_class:
-                students_by_class[student.class_id] = []
-            students_by_class[student.class_id].append(student.student_id)
+    classes = db.query(Class).options(joinedload(Class.teacher)).filter(Class.school_id == school_id).all()
     
-    # Pre-load all cases for the school
-    all_cases = db.query(Case).filter(
-        Case.student_id.in_(student_ids),
-        Case.status != CaseStatus.CLOSED
-    ).all() if student_ids else []
+    # Count students per class
+    class_student_counts = db.query(
+        Student.class_id, func.count(Student.student_id)
+    ).filter(Student.school_id == school_id).group_by(Student.class_id).all()
+    student_count_map = {c[0]: c[1] for c in class_student_counts}
     
-    # Group cases by student
-    cases_by_student = {}
-    for case in all_cases:
-        cases_by_student[case.student_id] = case
+    # Count at-risk students per class
+    class_risk_counts = db.query(
+        Student.class_id, func.count(func.distinct(Student.student_id))
+    ).join(Case, Student.student_id == Case.student_id)\
+     .filter(
+         Student.school_id == school_id,
+         Case.status != CaseStatus.CLOSED,
+         Case.risk_level.in_([RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL])
+     ).group_by(Student.class_id).all()
+    risk_count_map = {c[0]: c[1] for c in class_risk_counts}
     
-    # Pre-load assessment responses grouped by student
-    responses_by_student = {}
-    for response in all_completed_responses:
-        if response.student_id not in responses_by_student:
-            responses_by_student[response.student_id] = []
-        if response.score is not None:
-            responses_by_student[response.student_id].append(response.score)
-    
+    # Avg wellbeing per class
+    class_wellbeing_scores = db.query(
+        Student.class_id, func.avg(StudentResponse.score)
+    ).join(StudentResponse, Student.student_id == StudentResponse.student_id)\
+     .filter(Student.school_id == school_id, StudentResponse.score.isnot(None))\
+     .group_by(Student.class_id).all()
+    wellbeing_map = {c[0]: float(c[1] or 0) for c in class_wellbeing_scores}
+
     class_metrics = []
-    for class_obj in classes:
-        class_student_ids = students_by_class.get(class_obj.class_id, [])
-        
-        if not class_student_ids:
-            continue
-        
-        # Count at-risk students in this class
-        at_risk_count = sum(
-            1 for sid in class_student_ids 
-            if sid in cases_by_student and cases_by_student[sid].risk_level in [RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL]
-        )
-        
-        # Calculate average wellbeing for this class
-        class_scores = []
-        for sid in class_student_ids:
-            if sid in responses_by_student:
-                class_scores.extend(responses_by_student[sid])
-        
-        class_wellbeing = round(sum(class_scores) / len(class_scores), 1) if class_scores else 0
-        
+    for cls in classes:
         class_metrics.append({
-            "id": str(class_obj.class_id),
-            "name": class_obj.name,
-            "grade": class_obj.grade,
-            "section": class_obj.section or "",
-            "teacher": class_obj.teacher.display_name if class_obj.teacher else "Unassigned",
-            "totalStudents": len(class_student_ids),
-            "wellbeingIndex": class_wellbeing,
-            "atRiskCount": at_risk_count
+            "id": str(cls.class_id),
+            "name": cls.name,
+            "grade": cls.grade,
+            "section": cls.section or "",
+            "teacher": cls.teacher.display_name if cls.teacher else "Unassigned",
+            "totalStudents": student_count_map.get(cls.class_id, 0),
+            "wellbeingIndex": round(wellbeing_map.get(cls.class_id, 0), 1),
+            "atRiskCount": risk_count_map.get(cls.class_id, 0)
         })
     
-    # Sort classes by grade
     class_metrics.sort(key=lambda x: (x["grade"], x["section"]))
-    
+
     return success_response({
         "school_id": str(school_id),
         "overview": {
@@ -416,7 +398,7 @@ async def get_school_overview(
             "low": low_risk_cases
         },
         "assessment_analytics": {
-            "total_assessments_completed": len(all_completed_responses),
+            "total_assessments_completed": int(assessment_stats.total_responses or 0) if assessment_stats else 0,
             "recent_assessments_30_days": recent_assessments_count,
             "students_assessed": students_assessed,
             "students_not_assessed": students_not_assessed,
@@ -429,8 +411,8 @@ async def get_school_overview(
                 "change_percentage": trend_change,
                 "previous_period_avg": round(previous_avg, 2),
                 "recent_period_avg": round(recent_avg, 2),
-                "previous_period_count": len(previous_scores),
-                "recent_period_count": len(recent_scores)
+                "previous_period_count": trend_stats.prev_count or 0,
+                "recent_period_count": trend_stats.curr_count or 0
             }
         },
         "recent_activity_30_days": {

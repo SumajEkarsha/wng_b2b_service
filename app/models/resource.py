@@ -10,6 +10,8 @@ class ResourceType(str, enum.Enum):
     VIDEO = "VIDEO"
     AUDIO = "AUDIO"
     ARTICLE = "ARTICLE"
+    RESEARCH_PAPER = "RESEARCH_PAPER"
+    SPECIAL = "SPECIAL"
 
 class ResourceStatus(str, enum.Enum):
     DRAFT = "DRAFT"

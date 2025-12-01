@@ -11,7 +11,7 @@ from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
 router = APIRouter()
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_counsellor(
     counsellor_data: UserCreate,
     db: Session = Depends(get_db)
@@ -62,7 +62,7 @@ async def create_counsellor(
     db.refresh(counsellor)
     return success_response(counsellor)
 
-@router.get("/")
+@router.get("")
 async def list_counsellors(
     school_id: UUID,  # Required parameter
     skip: int = 0,
@@ -300,6 +300,55 @@ async def get_counsellor_dashboard(
         StudentResponse.completed_at >= thirty_days_ago
     ).distinct(StudentResponse.assessment_id).count() if student_ids else 0
 
+    # === CALENDAR METRICS ===
+    from app.models.calendar_event import CalendarEvent, EventStatus
+    from sqlalchemy import or_
+
+    now = datetime.utcnow()
+    # Adjust for IST (UTC+5:30) for "today" calculation if needed, but for now using UTC date
+    # Ideally, we should handle timezone properly. Assuming server is UTC.
+    # To match frontend "today", we might need to be careful.
+    # Let's stick to UTC for now or basic date comparison.
+    
+    today_start = datetime.combine(now.date(), datetime.min.time())
+    today_end = datetime.combine(now.date(), datetime.max.time())
+    
+    # Query for today's sessions
+    todays_sessions_count = db.query(CalendarEvent).filter(
+        or_(
+            CalendarEvent.created_by == counsellor_id,
+            CalendarEvent.attendees.any(counsellor_id)
+        ),
+        CalendarEvent.start_time >= today_start,
+        CalendarEvent.start_time <= today_end,
+        CalendarEvent.status.notin_([EventStatus.CANCELLED, EventStatus.COMPLETED])
+    ).count()
+    
+    # Query for next session
+    next_session = db.query(CalendarEvent).filter(
+        or_(
+            CalendarEvent.created_by == counsellor_id,
+            CalendarEvent.attendees.any(counsellor_id)
+        ),
+        CalendarEvent.start_time > now,
+        CalendarEvent.status.notin_([EventStatus.CANCELLED, EventStatus.COMPLETED])
+    ).order_by(CalendarEvent.start_time).first()
+    
+    next_session_data = None
+    if next_session:
+        student_name = next_session.title # Default fallback
+        if next_session.related_student_id:
+             # Try to fetch student name if linked
+             student = db.query(Student).filter(Student.student_id == next_session.related_student_id).first()
+             if student:
+                 student_name = f"{student.first_name} {student.last_name}"
+        
+        next_session_data = {
+            "title": next_session.title,
+            "start_time": next_session.start_time.isoformat(),
+            "student_name": student_name
+        }
+
     return success_response({
         "counsellor_id": str(counsellor_id),
         "counsellor_name": counsellor.display_name,
@@ -330,6 +379,10 @@ async def get_counsellor_dashboard(
             "by_category": category_breakdown,
             "students_at_risk_by_assessment": students_at_risk_by_assessment[:10],  # Top 10
             "student_assessment_details": students_assessment_details
+        },
+        "calendar_metrics": {
+            "todays_sessions_count": todays_sessions_count,
+            "next_session": next_session_data
         }
     })
 

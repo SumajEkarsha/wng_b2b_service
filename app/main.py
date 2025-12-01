@@ -7,8 +7,7 @@ from app.api.v1 import api_router
 app = FastAPI(
     title="School Mental Health Platform API",
     description="B2B SaaS platform for K-12 school mental health management",
-    version="1.0.0",
-    redirect_slashes=False
+    version="1.0.0"
 )
 
 # CORS Middleware

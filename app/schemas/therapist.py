@@ -103,6 +103,7 @@ class TherapistBookingResponse(BaseModel):
     confirmed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    therapist: Optional[TherapistResponse] = None
 
     class Config:
         from_attributes = True

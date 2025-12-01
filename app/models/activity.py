@@ -20,6 +20,7 @@ class Activity(Base):
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
     type = Column(SQLEnum(ActivityType), nullable=False)
+    thumbnail_url = Column(String, nullable=True)
     duration = Column(Integer, nullable=True)  # Duration in minutes
     target_grades = Column(ARRAY(String), nullable=True)
     materials = Column(ARRAY(String), nullable=True)

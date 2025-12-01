@@ -1,201 +1,264 @@
-# School Mental Health Platform - Backend Service
+# WellNest Group - School Mental Wellness Platform (Backend)
 
-FastAPI + SQLAlchemy + PostgreSQL (Neon DB) backend for the School Mental Health SaaS platform.
+**A comprehensive mental health and wellbeing management system for educational institutions.**
 
-## Tech Stack
-- **FastAPI**: Modern Python web framework
-- **SQLAlchemy**: ORM for database operations
-- **PostgreSQL**: Neon DB serverless Postgres
-- **Alembic**: Database migrations
-- **Pydantic**: Data validation
-- **JWT**: Authentication
+## 🎯 Overview
 
-## Quick Start
+FastAPI-based backend service powering the WellNest Group platform. This system enables schools to track student wellbeing, manage counseling cases, conduct assessments, and provide data-driven insights to support student mental health.
 
-### Option 1: Local Development with Neon DB
+## ✨ Key Features
 
-1. **Install dependencies:**
+- **Student Wellbeing Tracking**: Monitor student mental health through assessments and observations
+- **Case Management**: Complete counseling case lifecycle management with journaling
+- **Assessment System**: Customizable mental health assessments with automated scoring
+- **Multi-Role Support**: Purpose-built dashboards for Teachers, Counsellors, and Principals
+- **Calendar & Scheduling**: Session booking and calendar management
+- **Activity Monitoring**: Track student participation in wellbeing activities
+- **Resource Library**: Curated mental health resources and webinars
+- **Marketplace**: Connect with external therapists and book sessions
+- **AI-Powered Insights**: Smart analytics and recommendations
+- **Consent Management**: GDPR-compliant consent tracking
+
+## 🛠️ Tech Stack
+
+| Technology | Purpose |
+|------------|---------|
+| **FastAPI** | High-performance async web framework |
+| **SQLAlchemy** | ORM for database operations |
+| **PostgreSQL** | Primary database (Neon DB) |
+| **Alembic** | Database schema migrations |
+| **Pydantic** | Data validation and serialization |
+| **JWT** | Secure authentication |
+| **Bcrypt** | Password hashing |
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.9+
+- PostgreSQL (or Neon DB account)
+- pip or uv package manager
+
+### Installation
+
+1. **Clone the repository**
+```bash
+git clone <repository-url>
+cd wng_b2b_service
+```
+
+2. **Install dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
-2. **Configure environment variables:**
+3. **Configure environment**
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and add your Neon DB connection string:
-```
-DATABASE_URL=postgresql://user:password@your-neon-host/dbname
-SECRET_KEY=your-secret-key-change-this
-```
-
-3. **Initialize database:**
-```bash
-python scripts/init_db.py
+Edit `.env` and set:
+```env
+DATABASE_URL=postgresql://user:password@host/dbname
+SECRET_KEY=your-super-secret-key-change-this
+ENVIRONMENT=development
 ```
 
-4. **Start the server:**
-```bash
-uvicorn app.main:app --reload
-```
-
-5. **Access the API:**
-- API: http://localhost:8000
-- Interactive docs: http://localhost:8000/docs
-- Alternative docs: http://localhost:8000/redoc
-
-### Option 2: Docker Compose (Local PostgreSQL)
-
-1. **Start services:**
-```bash
-docker-compose up -d
-```
-
-2. **Initialize database:**
-```bash
-docker-compose exec api python scripts/init_db.py
-```
-
-3. **Access the API:**
-- API: http://localhost:8000
-- Docs: http://localhost:8000/docs
-
-## Database Migrations
-
-### Create a new migration:
-```bash
-alembic revision --autogenerate -m "description"
-```
-
-### Apply migrations:
+4. **Run database migrations**
 ```bash
 alembic upgrade head
 ```
 
-### Rollback migration:
+5. **Start the server**
+```bash
+uvicorn app.main:app --reload
+```
+
+6. **Access the API**
+- API: http://localhost:8000
+- Interactive Docs: http://localhost:8000/docs
+- Alternative Docs: http://localhost:8000/redoc
+
+## 📁 Project Structure
+
+```
+app/
+├── api/v1/endpoints/     # API route handlers
+│   ├── auth.py
+│   ├── users.py
+│   ├── students.py
+│   ├── cases.py
+│   ├── assessments.py
+│   └── ...
+├── core/                 # Core configurations
+│   ├── config.py
+│   ├── database.py
+│   └── security.py
+├── models/              # SQLAlchemy models
+├── schemas/             # Pydantic schemas
+├── crud/                # Database operations
+└── main.py             # Application entry
+
+alembic/                # Database migrations
+scripts/                # Utility scripts
+```
+
+## 🔑 Authentication
+
+The API uses JWT-based authentication. Include the token in requests:
+
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  http://localhost:8000/api/v1/users/me
+```
+
+### Login
+```bash
+POST /api/v1/auth/login
+{
+  "email": "user@example.com",
+  "password": "password"
+}
+```
+
+## 📚 API Documentation
+
+### Core Endpoints
+
+**Authentication**
+- `POST /api/v1/auth/login` - User login
+
+**Users & Profiles**
+- `GET /api/v1/users/me` - Get current user
+- `PATCH /api/v1/users/{id}` - Update user profile
+
+**Students**
+- `GET /api/v1/students/` - List students (filtered by role)
+- `GET /api/v1/students/{id}` - Get student details
+- `POST /api/v1/students/` - Create student
+
+**Cases**
+- `GET /api/v1/cases/` - List cases
+- `POST /api/v1/cases/` - Create new case
+- `GET /api/v1/cases/{id}` - Get case details
+- `POST /api/v1/cases/{id}/journal` - Add journal entry
+
+**Assessments**
+- `GET /api/v1/assessments/` - List assessments
+- `POST /api/v1/assessments/` - Create assessment
+- `POST /api/v1/assessments/{id}/submit` - Submit responses
+- `GET /api/v1/assessments/{id}/score` - Get scores
+
+**Calendar & Sessions**
+- `GET /api/v1/calendar/` - Get calendar events
+- `POST /api/v1/calendar/` - Create event
+- `PATCH /api/v1/calendar/{id}` - Update event
+
+**Analytics**
+- `GET /api/v1/analytics/school` - School-wide analytics
+- `GET /api/v1/analytics/teacher` - Teacher dashboard data
+- `GET /api/v1/analytics/counsellor` - Counsellor dashboard data
+
+For complete API documentation, visit `/docs` when running the server.
+
+## 🗄️ Database Migrations
+
+**Create a new migration**
+```bash
+alembic revision --autogenerate -m "Add new column"
+```
+
+**Apply migrations**
+```bash
+alembic upgrade head
+```
+
+**Rollback**
 ```bash
 alembic downgrade -1
 ```
 
-## API Endpoints
-
-### Authentication
-- `POST /api/v1/auth/login` - Login and get JWT token
-
-### Users
-- `POST /api/v1/users/` - Create user
-- `GET /api/v1/users/me` - Get current user
-- `GET /api/v1/users/{user_id}` - Get user by ID
-- `PATCH /api/v1/users/{user_id}` - Update user
-
-### Students
-- `POST /api/v1/students/` - Create student
-- `GET /api/v1/students/` - List students
-- `GET /api/v1/students/{student_id}` - Get student
-- `PATCH /api/v1/students/{student_id}` - Update student
-
-### Cases
-- `POST /api/v1/cases/` - Create case
-- `GET /api/v1/cases/` - List cases
-- `GET /api/v1/cases/{case_id}` - Get case
-- `POST /api/v1/cases/{case_id}/journal` - Add journal entry
-- `GET /api/v1/cases/{case_id}/journal` - Get journal entries
-
-### Observations
-- `POST /api/v1/observations/` - Create observation
-- `GET /api/v1/observations/` - List observations
-- `GET /api/v1/observations/{observation_id}` - Get observation
-
-### Assessments
-- `POST /api/v1/assessments/` - Create assessment
-- `POST /api/v1/assessments/{id}/submit` - Submit responses
-- `GET /api/v1/assessments/{id}/score` - Get scores
-- `GET /api/v1/assessments/` - List assessments
-
-### Consents
-- `POST /api/v1/consents/` - Create consent
-- `GET /api/v1/consents/` - List consents
-- `POST /api/v1/consents/{id}/revoke` - Revoke consent
-
-## Sample Credentials (after init_db.py)
-
-```
-Counsellor: counsellor@demo.school / password123
-Teacher: teacher@demo.school / password123
-Principal: principal@demo.school / password123
+**View migration history**
+```bash
+alembic history
 ```
 
-## Project Structure
-```
-app/
-├── api/
-│   ├── v1/
-│   │   ├── endpoints/    # API route handlers
-│   │   └── __init__.py
-│   └── dependencies.py   # Shared dependencies
-├── core/
-│   ├── config.py         # Settings
-│   ├── database.py       # DB connection
-│   └── security.py       # Auth utilities
-├── models/               # SQLAlchemy models
-│   ├── user.py
-│   ├── student.py
-│   ├── case.py
-│   ├── assessment.py
-│   ├── observation.py
-│   └── consent.py
-├── schemas/              # Pydantic schemas
-│   ├── user.py
-│   ├── student.py
-│   ├── case.py
-│   └── ...
-└── main.py              # Application entry point
+## 🔒 Security Features
 
-alembic/                 # Database migrations
-scripts/                 # Utility scripts
+- JWT token authentication with configurable expiry
+- Password hashing using bcrypt
+- Role-based access control (RBAC)
+- Consent management for data privacy
+- SQL injection protection via SQLAlchemy
+- CORS configuration for frontend integration
+
+## 🧪 Development
+
+### Code Quality
+```bash
+# Format code
+black app/
+
+# Lint
+flake8 app/
+
+# Type checking
+mypy app/
 ```
 
-## Development
-
-### Run tests:
+### Running Tests
 ```bash
 pytest
+pytest --cov=app tests/
 ```
 
-### Format code:
-```bash
-black app/
-```
-
-### Lint:
-```bash
-flake8 app/
-```
-
-## Deployment
-
-### Neon DB Setup
-1. Create a Neon project at https://neon.tech
-2. Copy the connection string
-3. Update DATABASE_URL in your environment
+## 🌍 Deployment
 
 ### Environment Variables
-Required for production:
-- `DATABASE_URL`: PostgreSQL connection string
-- `SECRET_KEY`: Strong random key for JWT
-- `ENVIRONMENT`: Set to "production"
 
-## Security Features
-- JWT-based authentication
-- Password hashing with bcrypt
-- Role-based access control
-- Consent management
-- Audit logging ready
+**Required:**
+- `DATABASE_URL` - PostgreSQL connection string
+- `SECRET_KEY` - Strong random key for JWT signing
 
-## Next Steps
-- Add AI integration endpoints
-- Implement dashboard analytics
-- Add real-time notifications
-- Integrate with external services
-- Add comprehensive test coverage
+**Optional:**
+- `ENVIRONMENT` - Set to `production`
+- `CORS_ORIGINS` - Allowed CORS origins
+- `ACCESS_TOKEN_EXPIRE_MINUTES` - JWT expiry (default: 30)
+
+### Neon DB Setup
+1. Create project at https://neon.tech
+2. Copy connection string
+3. Update `DATABASE_URL` in environment
+
+### Docker Deployment
+```bash
+docker build -t wellnest-backend .
+docker run -p 8000:8000 --env-file .env wellnest-backend
+```
+
+## 📊 Database Schema
+
+Key entities:
+- **Users**: Teachers, Counsellors, Principals
+- **Students**: Student profiles with wellbeing data
+- **Cases**: Counseling cases with risk levels
+- **Assessments**: Mental health assessment templates
+- **Observations**: Teacher/staff observations
+- **Consents**: Parent/guardian consent records
+- **Calendar**: Events and session bookings
+- **Activities**: Wellbeing activities and workshops
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests and linting
+5. Submit a pull request
+
+## 📝 License
+
+Proprietary - WellNest Group © 2024
+
+## 🆘 Support
+
+For issues or questions, contact: support@wellnestgroup.com

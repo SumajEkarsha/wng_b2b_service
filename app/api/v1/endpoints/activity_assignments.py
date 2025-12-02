@@ -24,6 +24,14 @@ class ActivitySimpleSchema(BaseModel):
     activity_id: UUID
     title: str
     description: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    type: Optional[str] = None
+    duration: Optional[int] = None
+    target_grades: Optional[List[str]] = None
+    location: Optional[str] = None
+    risk_level: Optional[str] = None
+    skill_level: Optional[str] = None
+    theme: Optional[List[str]] = None
     
     class Config:
         from_attributes = True

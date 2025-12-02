@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
-from app.models.activity import ActivityType
+from app.models.activity import ActivityType, LocationType, RiskLevel, SkillLevel
 
 
 class ActivityBase(BaseModel):
@@ -15,6 +15,11 @@ class ActivityBase(BaseModel):
     instructions: Optional[List[str]] = None
     objectives: Optional[List[str]] = None
     diagnosis: Optional[List[str]] = None
+    location: Optional[LocationType] = None
+    risk_level: Optional[RiskLevel] = None
+    skill_level: Optional[SkillLevel] = None
+    theme: Optional[List[str]] = None
+    thumbnail_url: Optional[str] = None
 
 
 class ActivityCreate(ActivityBase):
@@ -31,6 +36,11 @@ class ActivityUpdate(BaseModel):
     instructions: Optional[List[str]] = None
     objectives: Optional[List[str]] = None
     diagnosis: Optional[List[str]] = None
+    location: Optional[LocationType] = None
+    risk_level: Optional[RiskLevel] = None
+    skill_level: Optional[SkillLevel] = None
+    theme: Optional[List[str]] = None
+    thumbnail_url: Optional[str] = None
 
 
 class Activity(ActivityBase):

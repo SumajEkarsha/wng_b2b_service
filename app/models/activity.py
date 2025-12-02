@@ -12,6 +12,21 @@ class ActivityType(str, enum.Enum):
     SOCIAL_EMOTIONAL_DEVELOPMENT = "SOCIAL_EMOTIONAL_DEVELOPMENT"
     LANGUAGE_COMMUNICATION_DEVELOPMENT = "LANGUAGE_COMMUNICATION_DEVELOPMENT"
 
+class LocationType(str, enum.Enum):
+    IN_CLASS = "IN_CLASS"
+    AT_HOME = "AT_HOME"
+    OTHER = "OTHER"
+
+class RiskLevel(str, enum.Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+class SkillLevel(str, enum.Enum):
+    BEGINNER = "BEGINNER"
+    INTERMEDIATE = "INTERMEDIATE"
+    ADVANCED = "ADVANCED"
+
 class Activity(Base):
     __tablename__ = "activities"
     
@@ -27,6 +42,10 @@ class Activity(Base):
     instructions = Column(ARRAY(Text), nullable=True)
     objectives = Column(ARRAY(String), nullable=True)
     diagnosis = Column(ARRAY(String), nullable=True)  # Special needs and mental health categories
+    location = Column(SQLEnum(LocationType), nullable=True)  # Where activity takes place
+    risk_level = Column(SQLEnum(RiskLevel), nullable=True)  # Safety risk level
+    skill_level = Column(SQLEnum(SkillLevel), nullable=True)  # Difficulty/skill required
+    theme = Column(ARRAY(String), nullable=True)  # Activity themes/focus areas (e.g., mindfulness, creativity, social-skills)
     is_counselor_only = Column(Boolean, default=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

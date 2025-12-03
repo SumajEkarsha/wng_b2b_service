@@ -16,21 +16,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Gzip Compression Middleware - compress responses > 1KB
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://wngfrontend-zvsy.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:5173",
-    ],
+    allow_origin_regex=".*", # Allow all origins with credentials
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_methods=["*"],  # Allow all HTTP methods including PATCH
+    allow_headers=["*"],  # Allow all headers
+    max_age=0, # Disable caching to fix persistent CORS errors
 )
-
-# Gzip Compression Middleware - compress responses > 1KB
-app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.include_router(api_router, prefix="/api/v1")
 

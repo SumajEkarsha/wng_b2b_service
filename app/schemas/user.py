@@ -156,6 +156,7 @@ class UserBase(BaseModel):
     display_name: str
     role: UserRole
     phone: Optional[str] = None
+    profile_picture_url: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
@@ -244,12 +245,14 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     display_name: Optional[str] = None
     phone: Optional[str] = None
+    profile_picture_url: Optional[str] = None
     profile: Optional[Union[TeacherProfile, CounsellorProfile, PrincipalProfile, AdminProfile, ParentProfile, dict]] = None
     availability: Optional[Union[Availability, dict]] = None
 
 class UserResponse(UserBase):
     user_id: UUID
     school_id: UUID
+    profile_picture_url: Optional[str] = None
     profile: Optional[dict] = None
     availability: Optional[dict] = None
     created_at: datetime

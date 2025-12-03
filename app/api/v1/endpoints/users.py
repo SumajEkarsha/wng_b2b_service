@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+import os
+import shutil
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
@@ -157,4 +159,53 @@ async def delete_user(
         "message": "User deleted successfully",
         "user_id": str(user_id),
         "email": user.email
+    })
+
+@router.post("/me/profile-picture")
+async def upload_profile_picture(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload a profile picture for the current user.
+    """
+    # Validate file type
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file type. Please upload an image."
+        )
+
+    # Create directory if it doesn't exist
+    upload_dir = "uploads/profiles"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Generate filename
+    file_extension = os.path.splitext(file.filename)[1]
+    filename = f"{current_user.user_id}{file_extension}"
+    file_path = os.path.join(upload_dir, filename)
+
+    # Save file
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save file: {str(e)}"
+        )
+
+    # Update user profile_picture_url
+    # Store relative path, frontend will need to handle base URL
+    profile_picture_url = f"/uploads/profiles/{filename}"
+    
+    current_user.profile_picture_url = profile_picture_url
+    db.commit()
+    db.refresh(current_user)
+
+    return success_response({
+        "message": "Profile picture uploaded successfully",
+        "profile_picture_url": profile_picture_url,
+        "user_id": str(current_user.user_id)
     })

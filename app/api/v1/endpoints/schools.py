@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
 from datetime import datetime
+import os
+import shutil
 from app.core.database import get_db
 from app.core.response import success_response
 from app.models.school import School
@@ -44,7 +46,8 @@ async def list_schools(
             "website": school.website,
             "timezone": school.timezone,
             "academic_year": school.academic_year,
-            "needs_data_onboarding": school.settings.get("needs_data_onboarding", False) if school.settings else False
+            "needs_data_onboarding": school.settings.get("needs_data_onboarding", False) if school.settings else False,
+            "logo_url": school.logo_url
         }
         schools_data.append(school_dict)
     
@@ -73,7 +76,8 @@ async def get_school(
         "timezone": school.timezone,
         "academic_year": school.academic_year,
         "settings": school.settings,
-        "needs_data_onboarding": school.settings.get("needs_data_onboarding", False) if school.settings else False
+        "needs_data_onboarding": school.settings.get("needs_data_onboarding", False) if school.settings else False,
+        "logo_url": school.logo_url
     }
     
     return success_response(school_dict)
@@ -599,3 +603,56 @@ async def upload_classes_data(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process file: {str(e)}"
         )
+
+@router.post("/{school_id}/logo")
+async def upload_school_logo(
+    school_id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload a school logo.
+    """
+    school = db.query(School).filter(School.school_id == school_id).first()
+    if not school:
+        raise HTTPException(status_code=404, detail="School not found")
+
+    # Validate file type
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file type. Please upload an image."
+        )
+
+    # Create directory if it doesn't exist
+    upload_dir = "uploads/logos"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Generate filename
+    file_extension = os.path.splitext(file.filename)[1]
+    filename = f"{school_id}{file_extension}"
+    file_path = os.path.join(upload_dir, filename)
+
+    # Save file
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save file: {str(e)}"
+        )
+
+    # Update school logo_url
+    # Store relative path, frontend will need to handle base URL
+    logo_url = f"/uploads/logos/{filename}"
+    
+    school.logo_url = logo_url
+    db.commit()
+    db.refresh(school)
+
+    return success_response({
+        "message": "Logo uploaded successfully",
+        "logo_url": logo_url,
+        "school_id": str(school_id)
+    })

@@ -20,6 +20,7 @@ class School(Base):
     academic_year = Column(String, nullable=True)
     data_retention_policy = Column(JSON, nullable=True)
     settings = Column(JSON, nullable=True)
+    logo_url = Column(String, nullable=True)
     
     # Relationships
     users = relationship("User", back_populates="school")

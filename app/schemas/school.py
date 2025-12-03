@@ -44,6 +44,7 @@ class SchoolCreate(BaseModel):
     timezone: str = Field(default="UTC", description="School timezone")
     academic_year: Optional[str] = Field(default=None, description="Current academic year (e.g., 2024-2025)")
     settings: Optional[Dict[str, Any]] = Field(default=None, description="School settings")
+    logo_url: Optional[str] = Field(default=None, description="School logo URL")
     
     class Config:
         json_schema_extra = {
@@ -90,6 +91,7 @@ class SchoolUpdate(BaseModel):
     timezone: Optional[str] = Field(default=None, description="School timezone")
     academic_year: Optional[str] = Field(default=None, description="Current academic year")
     settings: Optional[SchoolSettings] = Field(default=None, description="School settings")
+    logo_url: Optional[str] = Field(default=None, description="School logo URL")
     
     class Config:
         json_schema_extra = {
@@ -112,6 +114,7 @@ class SchoolResponse(BaseModel):
     timezone: str
     academic_year: Optional[str] = None
     needs_data_onboarding: Optional[bool] = None
+    logo_url: Optional[str] = None
     
     class Config:
         from_attributes = True

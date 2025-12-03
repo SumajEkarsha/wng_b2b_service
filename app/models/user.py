@@ -24,6 +24,7 @@ class User(Base):
     hashed_password = Column(String, nullable=True)
     display_name = Column(String, nullable=False)
     phone = Column(String, nullable=True)
+    profile_picture_url = Column(String, nullable=True)
     profile = Column(JSON, nullable=True)  # qualifications, languages, specialties
     availability = Column(JSON, nullable=True)  # weekly blocks
     auth_provider = Column(JSON, nullable=True)  # SSO metadata

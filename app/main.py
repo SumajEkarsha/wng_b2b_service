@@ -3,6 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from app.core.config import settings
 from app.api.v1 import api_router
+from fastapi.staticfiles import StaticFiles
+import os
+
+# Ensure uploads directory exists
+os.makedirs("uploads", exist_ok=True)
+
 
 app = FastAPI(
     title="School Mental Health Platform API",
@@ -23,6 +29,9 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.include_router(api_router, prefix="/api/v1")
+
+# Mount static files
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 @app.get("/")
 async def root():

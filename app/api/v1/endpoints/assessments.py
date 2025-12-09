@@ -7,6 +7,7 @@ from datetime import datetime
 import statistics
 from app.core.database import get_db
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.assessment import Assessment, AssessmentTemplate, StudentResponse
 from app.models.student import Student
 from app.models.class_model import Class
@@ -16,6 +17,9 @@ from app.schemas.assessment import (
     AssessmentTemplateCreate, AssessmentTemplateUpdate, AssessmentTemplateResponse,
     AssessmentListResponse, StudentAssessmentResult
 )
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 

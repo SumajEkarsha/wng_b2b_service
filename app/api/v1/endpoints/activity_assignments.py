@@ -5,12 +5,16 @@ from uuid import UUID
 from datetime import datetime
 
 from app.api.dependencies import get_db, get_current_user
+from app.core.logging_config import get_logger
 from app.models.user import User
 from app.models.activity_assignment import ActivityAssignment, AssignmentStatus
 from app.models.activity_submission import ActivitySubmission, SubmissionStatus, FileType
 from app.models.student import Student
 from app.models.class_model import Class
 from pydantic import BaseModel
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 

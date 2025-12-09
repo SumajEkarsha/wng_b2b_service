@@ -7,8 +7,12 @@ from typing import Optional
 from app.core.database import get_db
 from app.core.security import verify_password, create_access_token
 from app.core.config import settings
+from app.core.logging_config import get_logger
 from app.models.user import User
 from pydantic import BaseModel, EmailStr
+
+# Initialize logger for this module
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -42,10 +46,13 @@ async def login(
     """
     Login endpoint - returns JWT token
     """
+    logger.info(f"Login attempt for email: {login_data.email}")
+    
     # Find user by email
     user = db.query(User).filter(User.email == login_data.email).first()
     
     if not user:
+        logger.warning(f"Login failed - user not found: {login_data.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -54,6 +61,10 @@ async def login(
     
     # Verify password
     if not verify_password(login_data.password, user.hashed_password):
+        logger.warning(
+            f"Login failed - invalid password for user: {login_data.email}",
+            extra={"extra_data": {"user_id": str(user.user_id)}}
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -65,6 +76,17 @@ async def login(
     access_token = create_access_token(
         data={"sub": user.email, "user_id": str(user.user_id)},
         expires_delta=access_token_expires
+    )
+    
+    logger.info(
+        f"Login successful for user: {login_data.email}",
+        extra={
+            "extra_data": {
+                "user_id": str(user.user_id),
+                "role": user.role.value,
+                "school_id": str(user.school_id)
+            }
+        }
     )
     
     return {
@@ -88,9 +110,12 @@ async def login_for_access_token(
     """
     OAuth2 compatible token login (for Swagger UI)
     """
+    logger.debug(f"Token login attempt for: {form_data.username}")
+    
     user = db.query(User).filter(User.email == form_data.username).first()
     
     if not user or not verify_password(form_data.password, user.hashed_password):
+        logger.warning(f"Token login failed for: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -102,6 +127,8 @@ async def login_for_access_token(
         data={"sub": user.email, "user_id": str(user.user_id)},
         expires_delta=access_token_expires
     )
+    
+    logger.info(f"Token login successful for: {form_data.username}")
     
     return {
         "access_token": access_token,
@@ -119,7 +146,14 @@ async def get_current_user_info(
     """
     from app.api.dependencies import get_current_user
     
+    logger.debug("Fetching current user info from token")
+    
     user = await get_current_user(token, db)
+    
+    logger.debug(
+        f"Retrieved user info for: {user.email}",
+        extra={"extra_data": {"user_id": str(user.user_id)}}
+    )
     
     return {
         "user_id": str(user.user_id),
@@ -135,4 +169,6 @@ async def logout():
     """
     Logout endpoint (client should delete token)
     """
+    logger.info("User logout requested")
     return {"message": "Successfully logged out"}
+

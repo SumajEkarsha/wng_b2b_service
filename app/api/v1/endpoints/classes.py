@@ -4,10 +4,14 @@ from typing import List
 from uuid import UUID
 from app.core.database import get_db
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.class_model import Class
 from app.models.school import School
 from app.models.user import User, UserRole
 from app.schemas.class_schema import ClassCreate, ClassResponse, ClassUpdate
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -16,9 +20,15 @@ async def create_class(
     class_data: ClassCreate,
     db: Session = Depends(get_db)
 ):
+    logger.info(
+        f"Creating class: {class_data.name}",
+        extra={"extra_data": {"school_id": str(class_data.school_id), "grade": class_data.grade, "section": class_data.section}}
+    )
+    
     # Validate school exists
     school = db.query(School).filter(School.school_id == class_data.school_id).first()
     if not school:
+        logger.warning(f"Class creation failed - school not found: {class_data.school_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"School not found"
@@ -28,11 +38,13 @@ async def create_class(
     if class_data.teacher_id:
         teacher = db.query(User).filter(User.user_id == class_data.teacher_id).first()
         if not teacher:
+            logger.warning(f"Class creation failed - teacher not found: {class_data.teacher_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Teacher not found"
             )
         if teacher.role != UserRole.TEACHER:
+            logger.warning(f"Class creation failed - user is not a teacher: {class_data.teacher_id}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"User is not a teacher"
@@ -42,6 +54,11 @@ async def create_class(
     db.add(class_obj)
     db.commit()
     db.refresh(class_obj)
+    
+    logger.info(
+        f"Class created successfully: {class_obj.name}",
+        extra={"extra_data": {"class_id": str(class_obj.class_id), "school_id": str(class_obj.school_id)}}
+    )
     
     # Serialize to dictionary
     class_dict = {
@@ -67,6 +84,11 @@ async def list_classes(
     teacher_id: UUID = None,
     db: Session = Depends(get_db)
 ):
+    logger.debug(
+        f"Listing classes for school: {school_id}",
+        extra={"extra_data": {"school_id": str(school_id), "grade": grade, "section": section}}
+    )
+    
     query = db.query(Class).options(
         joinedload(Class.teacher)
     ).filter(Class.school_id == school_id)
@@ -77,6 +99,8 @@ async def list_classes(
     if teacher_id:
         query = query.filter(Class.teacher_id == teacher_id)
     classes = query.offset(skip).limit(limit).all()
+    
+    logger.debug(f"Found {len(classes)} classes")
     
     # Serialize classes to dictionaries to avoid JSON serialization issues with relationships
     classes_data = []
@@ -101,10 +125,13 @@ async def get_class(
     class_id: UUID,
     db: Session = Depends(get_db)
 ):
+    logger.debug(f"Fetching class: {class_id}")
+    
     class_obj = db.query(Class).options(
         joinedload(Class.teacher)
     ).filter(Class.class_id == class_id).first()
     if not class_obj:
+        logger.warning(f"Class not found: {class_id}")
         raise HTTPException(status_code=404, detail="Class not found")
     
     # Serialize to dictionary
@@ -127,15 +154,21 @@ async def update_class(
     class_update: ClassUpdate,
     db: Session = Depends(get_db)
 ):
+    logger.info(f"Updating class: {class_id}")
+    
     class_obj = db.query(Class).filter(Class.class_id == class_id).first()
     if not class_obj:
+        logger.warning(f"Class update failed - not found: {class_id}")
         raise HTTPException(status_code=404, detail="Class not found")
 
     # Validate teacher exists if teacher_id is being updated
     update_data = class_update.dict(exclude_unset=True)
+    logger.debug(f"Update fields: {list(update_data.keys())}")
+    
     if "teacher_id" in update_data and update_data["teacher_id"] is not None:
         teacher = db.query(User).filter(User.user_id == update_data["teacher_id"]).first()
         if not teacher:
+            logger.warning(f"Class update failed - teacher not found: {update_data['teacher_id']}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Teacher not found"
@@ -151,6 +184,8 @@ async def update_class(
 
     db.commit()
     db.refresh(class_obj)
+    
+    logger.info(f"Class updated successfully", extra={"extra_data": {"class_id": str(class_id)}})
     
     # Serialize to dictionary
     class_dict = {
@@ -171,10 +206,15 @@ async def delete_class(
     class_id: UUID,
     db: Session = Depends(get_db)
 ):
+    logger.info(f"Deleting class: {class_id}")
+    
     class_obj = db.query(Class).filter(Class.class_id == class_id).first()
     if not class_obj:
+        logger.warning(f"Class deletion failed - not found: {class_id}")
         raise HTTPException(status_code=404, detail="Class not found")
 
     db.delete(class_obj)
     db.commit()
+    
+    logger.info(f"Class deleted successfully", extra={"extra_data": {"class_id": str(class_id)}})
     return success_response({"message": "Class deleted successfully", "class_id": str(class_id)})

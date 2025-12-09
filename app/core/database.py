@@ -34,3 +34,35 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# Activity Database - uses separate DATABASE_URL_ACTIVITY if configured
+activity_db_url = settings.DATABASE_URL_ACTIVITY or settings.DATABASE_URL
+
+activity_engine = create_engine(
+    activity_db_url,
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=5,
+    pool_recycle=3600,
+    echo=False,
+    connect_args={
+        "connect_timeout": 10,
+    }
+)
+
+ActivitySessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=activity_engine,
+    expire_on_commit=False
+)
+
+def get_activity_db():
+    """Get database session for activities (uses separate DB if configured)."""
+    db = ActivitySessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+

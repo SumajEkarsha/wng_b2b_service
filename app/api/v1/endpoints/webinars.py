@@ -6,12 +6,16 @@ from uuid import UUID
 from datetime import datetime
 from app.core.database import get_db
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.webinar import Webinar, WebinarCategory, WebinarStatus, WebinarLevel
 from app.models.webinar_registration import WebinarRegistration, RegistrationStatus
 from app.schemas.webinar import (
     WebinarCreate, WebinarUpdate, WebinarResponse, WebinarListResponse,
     WebinarRegistrationCreate, WebinarRegistrationResponse
 )
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 

@@ -7,8 +7,12 @@ import os
 import shutil
 from app.core.database import get_db
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.school import School
 from app.schemas.school import SchoolCreate, SchoolResponse, SchoolUpdate, SchoolOnboardingRequest, SchoolOnboardingResponse
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -17,10 +21,12 @@ async def create_school(
     school_data: SchoolCreate,
     db: Session = Depends(get_db)
 ):
+    logger.info(f"Creating school: {school_data.name}")
     school = School(**school_data.dict())
     db.add(school)
     db.commit()
     db.refresh(school)
+    logger.info(f"School created", extra={"extra_data": {"school_id": str(school.school_id)}})
     return success_response(school)
 
 @router.get("")
@@ -29,7 +35,9 @@ async def list_schools(
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
+    logger.debug("Listing schools")
     schools = db.query(School).offset(skip).limit(limit).all()
+    logger.debug(f"Found {len(schools)} schools")
     
     # Add needs_data_onboarding flag from settings
     schools_data = []
@@ -58,8 +66,10 @@ async def get_school(
     school_id: UUID,
     db: Session = Depends(get_db)
 ):
+    logger.debug(f"Fetching school: {school_id}")
     school = db.query(School).filter(School.school_id == school_id).first()
     if not school:
+        logger.warning(f"School not found: {school_id}")
         raise HTTPException(status_code=404, detail="School not found")
     
     # Include needs_data_onboarding flag from settings
@@ -104,8 +114,10 @@ async def delete_school(
     school_id: UUID,
     db: Session = Depends(get_db)
 ):
+    logger.info(f"Deleting school: {school_id}")
     school = db.query(School).filter(School.school_id == school_id).first()
     if not school:
+        logger.warning(f"School deletion failed - not found: {school_id}")
         raise HTTPException(status_code=404, detail="School not found")
 
     # Check for dependent records before deletion
@@ -121,6 +133,7 @@ async def delete_school(
         dependent_records.append(f"{len(school.resources)} resource(s)")
 
     if dependent_records:
+        logger.warning(f"School deletion blocked - has dependencies", extra={"extra_data": {"school_id": str(school_id), "dependencies": dependent_records}})
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Contact Technical Support to request the deletion process."
@@ -128,6 +141,7 @@ async def delete_school(
 
     db.delete(school)
     db.commit()
+    logger.info(f"School deleted", extra={"extra_data": {"school_id": str(school_id)}})
     return success_response({"message": "School deleted successfully", "school_id": str(school_id)})
 
 @router.post("/onboarding", status_code=status.HTTP_201_CREATED)

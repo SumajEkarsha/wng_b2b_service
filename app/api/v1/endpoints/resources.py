@@ -6,26 +6,40 @@ from uuid import UUID
 from datetime import datetime
 from app.core.database import get_db
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.resource import Resource, ResourceType, ResourceStatus
 from app.schemas.resource import ResourceCreate, ResourceResponse, ResourceUpdate, ResourceListResponse
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_resource(resource_data: ResourceCreate, db: Session = Depends(get_db)):
+    logger.info(
+        f"Creating resource: {resource_data.title}",
+        extra={"extra_data": {"type": str(resource_data.type), "school_id": str(resource_data.school_id) if resource_data.school_id else None}}
+    )
+    
     if resource_data.type == ResourceType.VIDEO and not resource_data.video_url:
+        logger.warning("Resource creation failed - video_url required")
         raise HTTPException(status_code=400, detail="video_url required for videos")
 
     if resource_data.type == ResourceType.AUDIO and not resource_data.audio_url:
+        logger.warning("Resource creation failed - audio_url required")
         raise HTTPException(status_code=400, detail="audio_url required for audio")
 
     if resource_data.type == ResourceType.ARTICLE and not resource_data.article_url:
+        logger.warning("Resource creation failed - article_url required")
         raise HTTPException(status_code=400, detail="article_url required for articles")
 
     resource = Resource(**resource_data.dict())
     db.add(resource)
     db.commit()
     db.refresh(resource)
+    
+    logger.info(f"Resource created successfully", extra={"extra_data": {"resource_id": str(resource.resource_id)}})
     return success_response(resource)
 
 @router.get("")
@@ -43,6 +57,11 @@ async def list_resources(
     include_global: bool = True,
     db: Session = Depends(get_db)
 ):
+    logger.debug(
+        "Listing resources",
+        extra={"extra_data": {"school_id": str(school_id) if school_id else None, "type": str(type) if type else None, "category": category}}
+    )
+    
     query = db.query(Resource)
 
     if school_id:
@@ -78,12 +97,17 @@ async def list_resources(
         query = query.filter(or_(Resource.title.ilike(pattern), Resource.description.ilike(pattern)))
 
     query = query.order_by(Resource.posted_date.desc())
-    return success_response(query.offset(skip).limit(limit).all())
+    resources = query.offset(skip).limit(limit).all()
+    logger.debug(f"Found {len(resources)} resources")
+    return success_response(resources)
 
 @router.get("/{resource_id}")
 async def get_resource(resource_id: UUID, increment_view: bool = True, db: Session = Depends(get_db)):
+    logger.debug(f"Fetching resource: {resource_id}")
+    
     resource = db.query(Resource).filter(Resource.resource_id == resource_id).first()
     if not resource:
+        logger.warning(f"Resource not found: {resource_id}")
         raise HTTPException(status_code=404, detail="Resource not found")
 
     if increment_view:
@@ -95,8 +119,11 @@ async def get_resource(resource_id: UUID, increment_view: bool = True, db: Sessi
 
 @router.patch("/{resource_id}")
 async def update_resource(resource_id: UUID, resource_update: ResourceUpdate, db: Session = Depends(get_db)):
+    logger.info(f"Updating resource: {resource_id}")
+    
     resource = db.query(Resource).filter(Resource.resource_id == resource_id).first()
     if not resource:
+        logger.warning(f"Resource update failed - not found: {resource_id}")
         raise HTTPException(status_code=404, detail="Resource not found")
 
     for field, value in resource_update.dict(exclude_unset=True).items():
@@ -105,16 +132,23 @@ async def update_resource(resource_id: UUID, resource_update: ResourceUpdate, db
     resource.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(resource)
+    
+    logger.info(f"Resource updated successfully", extra={"extra_data": {"resource_id": str(resource_id)}})
     return success_response(resource)
 
 @router.delete("/{resource_id}")
 async def delete_resource(resource_id: UUID, db: Session = Depends(get_db)):
+    logger.info(f"Deleting resource: {resource_id}")
+    
     resource = db.query(Resource).filter(Resource.resource_id == resource_id).first()
     if not resource:
+        logger.warning(f"Resource deletion failed - not found: {resource_id}")
         raise HTTPException(status_code=404, detail="Resource not found")
 
     db.delete(resource)
     db.commit()
+    
+    logger.info(f"Resource deleted successfully", extra={"extra_data": {"resource_id": str(resource_id)}})
     return success_response({"message": "Resource deleted successfully", "resource_id": str(resource_id)})
 
 @router.get("/categories/list")

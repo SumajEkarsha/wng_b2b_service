@@ -4,9 +4,13 @@ from typing import List, Optional
 from uuid import UUID
 from app.core.database import get_db
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.observation import Observation
 from app.models.user import User, UserRole
 from app.schemas.observation import ObservationCreate, ObservationResponse
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -15,9 +19,15 @@ async def create_observation(
     observation_data: ObservationCreate,
     db: Session = Depends(get_db)
 ):
+    logger.info(
+        f"Creating observation for student: {observation_data.student_id}",
+        extra={"extra_data": {"student_id": str(observation_data.student_id), "reported_by": str(observation_data.reported_by), "severity": str(observation_data.severity)}}
+    )
+    
     # Validate reporter exists
     reporter = db.query(User).filter(User.user_id == observation_data.reported_by).first()
     if not reporter:
+        logger.warning(f"Observation creation failed - reporter not found: {observation_data.reported_by}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Reporter not found"
@@ -35,6 +45,11 @@ async def create_observation(
     db.add(observation)
     db.commit()
     db.refresh(observation)
+    
+    logger.info(
+        f"Observation created successfully",
+        extra={"extra_data": {"observation_id": str(observation.observation_id), "student_id": str(observation.student_id)}}
+    )
 
     # Build response with reporter information
     response_data = {
@@ -64,6 +79,11 @@ async def list_observations(
     processed: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
+    logger.debug(
+        "Listing observations",
+        extra={"extra_data": {"student_id": str(student_id) if student_id else None, "severity": severity, "processed": processed}}
+    )
+    
     # Fetch observations with reporter information
     query = (
         db.query(Observation)
@@ -84,6 +104,7 @@ async def list_observations(
     query = query.order_by(Observation.timestamp.desc())
 
     observations = query.offset(skip).limit(limit).all()
+    logger.debug(f"Found {len(observations)} observations")
 
     # Build response data with reporter information
     result = []
@@ -111,6 +132,8 @@ async def get_observation(
     observation_id: UUID,
     db: Session = Depends(get_db)
 ):
+    logger.debug(f"Fetching observation: {observation_id}")
+    
     # Fetch observation with reporter information
     observation = (
         db.query(Observation)
@@ -120,6 +143,7 @@ async def get_observation(
     )
 
     if not observation:
+        logger.warning(f"Observation not found: {observation_id}")
         raise HTTPException(status_code=404, detail="Observation not found")
 
     # Build response data with reporter information
@@ -146,6 +170,8 @@ async def process_observation(
     db: Session = Depends(get_db)
 ):
     """Mark an observation as processed/reviewed"""
+    logger.info(f"Processing observation: {observation_id}")
+    
     # Fetch observation with reporter information
     observation = (
         db.query(Observation)
@@ -155,11 +181,14 @@ async def process_observation(
     )
 
     if not observation:
+        logger.warning(f"Observation processing failed - not found: {observation_id}")
         raise HTTPException(status_code=404, detail="Observation not found")
 
     observation.processed = True
     db.commit()
     db.refresh(observation)
+    
+    logger.info(f"Observation processed successfully", extra={"extra_data": {"observation_id": str(observation_id)}})
 
     # Build response data with reporter information
     response_data = {

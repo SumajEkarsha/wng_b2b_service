@@ -1,102 +1,151 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
-from uuid import UUID
+from sqlalchemy import func
+from typing import List, Optional
 
-from app.api.dependencies import get_db, get_current_user
-from app.models.activity import Activity, ActivityType
-from app.models.user import User
-from app.schemas.activity import Activity as ActivitySchema, ActivityCreate, ActivityUpdate
+from app.core.database import get_activity_db
+from app.core.logging_config import get_logger
+from app.models.activity_data import ActivityData
+from app.core.s3_service import s3_service
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[ActivitySchema])
+@router.get("/")
 def get_activities(
     skip: int = 0,
     limit: int = 100,
-    school_id: UUID = None,
-    activity_type: ActivityType = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    age: Optional[int] = Query(None, description="Filter by age"),
+    diagnosis: Optional[str] = Query(None, description="Filter by diagnosis (e.g., ADHD, Anxiety)"),
+    themes: Optional[str] = Query(None, description="Filter by themes (comma-separated)"),
+    include_flashcards: bool = Query(False, description="Include S3 flashcard images in response"),
+    db: Session = Depends(get_activity_db)
 ):
-    """Get all activities with optional filtering"""
-    query = db.query(Activity)
+    """
+    Get all activities with optional filtering.
     
-    # Filter by school
-    if school_id:
-        query = query.filter(Activity.school_id == school_id)
-    
-    # Filter by type
-    if activity_type:
-        query = query.filter(Activity.type == activity_type)
-        
-    # Role-based access control
-    # If user is NOT a counselor or admin, hide counselor-only activities
-    from app.models.user import UserRole
-    if current_user.role not in [UserRole.COUNSELLOR, UserRole.ADMIN]:
-        query = query.filter(Activity.is_counselor_only == False)
-        
-    return query.offset(skip).limit(limit).all()
-
-
-@router.get("/{activity_id}", response_model=ActivitySchema)
-def get_activity(activity_id: UUID, db: Session = Depends(get_db)):
-    """Get a specific activity by ID"""
-    activity = db.query(Activity).filter(Activity.activity_id == activity_id).first()
-    if not activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-    return activity
-
-
-@router.post("/", response_model=ActivitySchema, status_code=201)
-async def create_activity(
-    activity: ActivityCreate, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Create a new activity"""
-    db_activity = Activity(
-        **activity.model_dump(),
-        created_by=current_user.user_id
+    Filters:
+    - age: Filter by exact age
+    - diagnosis: Filter by diagnosis (case-insensitive partial match)
+    - themes: Filter by themes (comma-separated, e.g., "Emotional Regulation,Motor Skills")
+    - include_flashcards: If true, includes base64 flashcard images from S3
+    """
+    logger.debug(
+        "Fetching activities",
+        extra={"extra_data": {"age": age, "diagnosis": diagnosis, "themes": themes, "skip": skip, "limit": limit}}
     )
-    db.add(db_activity)
-    db.commit()
-    db.refresh(db_activity)
-    return db_activity
+    
+    query = db.query(ActivityData)
+    
+    # Filter by age
+    if age is not None:
+        query = query.filter(ActivityData.age == age)
+    
+    # Filter by diagnosis (case-insensitive partial match)
+    if diagnosis:
+        query = query.filter(ActivityData.diagnosis.ilike(f"%{diagnosis}%"))
+    
+    activities = query.offset(skip).limit(limit).all()
+    logger.debug(f"Found {len(activities)} activities from database")
+    
+    # Parse themes filter
+    theme_list = [t.strip().lower() for t in themes.split(",")] if themes else []
+    
+    result = []
+    for activity in activities:
+        act_data = activity.activity_data or {}
+        
+        # Filter by themes in Python (since themes are in JSONB)
+        if theme_list:
+            act_themes = act_data.get("Themes", [])
+            act_themes_lower = " ".join([t.lower() for t in act_themes]) if isinstance(act_themes, list) else ""
+            
+            # Check if any theme partially matches
+            if not any(t in act_themes_lower for t in theme_list):
+                continue
+        
+        # Build response
+        activity_response = {
+            "activity_id": activity.activity_id,
+            "activity_name": act_data.get("Activity Name") or activity.activity_name,
+            "description": act_data.get("Activity Description"),
+            "therapy_goal": act_data.get("Therapy Goal"),
+            "learning_goal": act_data.get("Learning Goal"),
+            "age": act_data.get("Age") or activity.age,
+            "themes": act_data.get("Themes", []),
+            "diagnosis": act_data.get("Diagnosis") or activity.diagnosis,
+            "framework": activity.framework,
+            "setting": activity.setting,
+            "supervision": activity.supervision,
+            "duration": activity.duration_pref,
+            "risk_level": activity.risk_level,
+            "skill_level": activity.skill_level,
+            "cognitive": activity.cognitive,
+            "sensory": activity.sensory,
+            "instructions": act_data.get("Instructions", {}),
+            "flashcards": None
+        }
+        
+        if include_flashcards:
+            activity_response["flashcards"] = s3_service.fetch_flashcards(activity.activity_id)
+        
+        result.append(activity_response)
+    
+    return {
+        "filters": {
+            "age": age,
+            "diagnosis": diagnosis,
+            "themes": theme_list if theme_list else None
+        },
+        "count": len(result),
+        "activities": result
+    }
 
 
-@router.put("/{activity_id}", response_model=ActivitySchema)
-async def update_activity(
-    activity_id: UUID, 
-    activity: ActivityUpdate, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+@router.get("/{activity_id}")
+def get_activity(
+    activity_id: str, 
+    include_flashcards: bool = Query(False, description="Include S3 flashcard images"),
+    db: Session = Depends(get_activity_db)
 ):
-    """Update an activity"""
-    db_activity = db.query(Activity).filter(Activity.activity_id == activity_id).first()
-    if not db_activity:
+    """Get a specific activity by ID"""
+    logger.debug(f"Fetching activity: {activity_id}")
+    
+    activity = db.query(ActivityData).filter(ActivityData.activity_id == activity_id).first()
+    if not activity:
+        logger.warning(f"Activity not found: {activity_id}")
         raise HTTPException(status_code=404, detail="Activity not found")
     
-    for key, value in activity.model_dump(exclude_unset=True).items():
-        setattr(db_activity, key, value)
+    act_data = activity.activity_data or {}
     
-    db.commit()
-    db.refresh(db_activity)
-    return db_activity
+    result = {
+        "activity_id": activity.activity_id,
+        "activity_name": act_data.get("Activity Name") or activity.activity_name,
+        "description": act_data.get("Activity Description"),
+        "therapy_goal": act_data.get("Therapy Goal"),
+        "learning_goal": act_data.get("Learning Goal"),
+        "age": act_data.get("Age") or activity.age,
+        "themes": act_data.get("Themes", []),
+        "diagnosis": act_data.get("Diagnosis") or activity.diagnosis,
+        "framework": activity.framework,
+        "setting": activity.setting,
+        "supervision": activity.supervision,
+        "duration": activity.duration_pref,
+        "risk_level": activity.risk_level,
+        "skill_level": activity.skill_level,
+        "cognitive": activity.cognitive,
+        "sensory": activity.sensory,
+        "instructions": act_data.get("Instructions", {}),
+        "flashcards": None
+    }
+    
+    if include_flashcards:
+        result["flashcards"] = s3_service.fetch_flashcards(activity.activity_id)
+    
+    return result
 
 
-@router.delete("/{activity_id}", status_code=204)
-async def delete_activity(
-    activity_id: UUID, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Delete an activity"""
-    db_activity = db.query(Activity).filter(Activity.activity_id == activity_id).first()
-    if not db_activity:
-        raise HTTPException(status_code=404, detail="Activity not found")
-    
-    db.delete(db_activity)
-    db.commit()
-    return None
+

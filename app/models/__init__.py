@@ -14,12 +14,18 @@ from app.models.goal import Goal
 from app.models.daily_booster import DailyBooster
 from app.models.calendar_event import CalendarEvent
 from app.models.session_note import SessionNote
-from app.models.webinar import Webinar
+from app.models.webinar import Webinar, WebinarSchoolRegistration, RegistrationType, RegistrationStatus
 from app.models.webinar_registration import WebinarRegistration
 from app.models.therapist import Therapist
 from app.models.therapist_booking import TherapistBooking
 from app.models.activity_assignment import ActivityAssignment
 from app.models.activity_submission import ActivitySubmission
+from app.models.student_engagement import (
+    StudentAppSession,
+    StudentDailyStreak,
+    StudentStreakSummary,
+    StudentWebinarAttendance
+)
 
 __all__ = [
     "School",
@@ -42,10 +48,17 @@ __all__ = [
     "CalendarEvent",
     "SessionNote",
     "Webinar",
+    "WebinarSchoolRegistration",
+    "RegistrationType",
+    "RegistrationStatus",
     "WebinarRegistration",
     "Therapist",
     "TherapistBooking",
     "ActivityAssignment",
-    "ActivitySubmission"
+    "ActivitySubmission",
+    "StudentAppSession",
+    "StudentDailyStreak",
+    "StudentStreakSummary",
+    "StudentWebinarAttendance"
 ]
 

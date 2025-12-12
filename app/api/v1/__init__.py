@@ -4,7 +4,8 @@ from app.api.v1.endpoints import (
     assessments, schools, classes, teachers, counsellors, school_admin, resources,
     calendar_events, consent_records, goals, ai_recommendations, risk_alerts,
     activities, daily_boosters, session_notes, templates, webinars, therapists,
-    activity_assignments
+    activity_assignments, analytics, counsellor_analytics, webinar_analytics,
+    teacher_analytics
 )
 
 api_router = APIRouter()
@@ -42,3 +43,9 @@ api_router.include_router(calendar_events.router, prefix="/calendar-events", tag
 # Professional development and marketplace endpoints
 api_router.include_router(webinars.router, prefix="/webinars", tags=["webinars"])
 api_router.include_router(therapists.router, prefix="/therapists", tags=["therapists"])
+
+# Analytics endpoints
+api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+api_router.include_router(counsellor_analytics.router, prefix="/analytics/counsellor", tags=["counsellor-analytics"])
+api_router.include_router(teacher_analytics.router, prefix="/analytics/teacher", tags=["teacher-analytics"])
+api_router.include_router(webinar_analytics.router, prefix="/analytics/webinars", tags=["webinar-analytics"])

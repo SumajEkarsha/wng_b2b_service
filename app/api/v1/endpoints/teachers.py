@@ -181,7 +181,6 @@ async def get_teacher_dashboard(
     db: Session = Depends(get_db)
 ):
     """Get comprehensive teacher dashboard with class insights and student wellbeing"""
-    from sqlalchemy.orm import joinedload
     
     teacher = db.query(User).filter(
         User.user_id == teacher_id,

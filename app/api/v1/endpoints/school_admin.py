@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, case, text
+from sqlalchemy import func, case as sql_case
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timedelta
@@ -126,19 +126,19 @@ async def get_school_overview(
     # Join Case -> Student to filter by school_id directly in DB
     case_stats = db.query(
         func.count(Case.case_id).label('total'),
-        func.sum(case(
+        func.sum(sql_case(
             (Case.status != CaseStatus.CLOSED, 1), else_=0
         )).label('active'),
-        func.sum(case(
+        func.sum(sql_case(
             ((Case.risk_level == RiskLevel.CRITICAL) & (Case.status != CaseStatus.CLOSED), 1), else_=0
         )).label('critical'),
-        func.sum(case(
+        func.sum(sql_case(
             ((Case.risk_level == RiskLevel.HIGH) & (Case.status != CaseStatus.CLOSED), 1), else_=0
         )).label('high'),
-        func.sum(case(
+        func.sum(sql_case(
             ((Case.risk_level == RiskLevel.MEDIUM) & (Case.status != CaseStatus.CLOSED), 1), else_=0
         )).label('medium'),
-        func.sum(case(
+        func.sum(sql_case(
             ((Case.risk_level == RiskLevel.LOW) & (Case.status != CaseStatus.CLOSED), 1), else_=0
         )).label('low')
     ).join(Student, Case.student_id == Student.student_id)\
@@ -235,19 +235,19 @@ async def get_school_overview(
     
     # Calculate averages for two periods in one query using conditional aggregation
     trend_stats = db.query(
-        func.avg(case(
+        func.avg(sql_case(
             ((StudentResponse.completed_at >= sixty_days_ago) & (StudentResponse.completed_at < thirty_days_ago), StudentResponse.score),
             else_=None
         )).label('prev_avg'),
-        func.avg(case(
+        func.avg(sql_case(
             (StudentResponse.completed_at >= thirty_days_ago, StudentResponse.score),
             else_=None
         )).label('curr_avg'),
-        func.count(case(
+        func.count(sql_case(
             ((StudentResponse.completed_at >= sixty_days_ago) & (StudentResponse.completed_at < thirty_days_ago), 1),
             else_=None
         )).label('prev_count'),
-        func.count(case(
+        func.count(sql_case(
             (StudentResponse.completed_at >= thirty_days_ago, 1),
             else_=None
         )).label('curr_count')

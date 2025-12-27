@@ -5,10 +5,14 @@ from uuid import UUID
 
 from app.api.dependencies import get_db
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.risk_alert import RiskAlert, AlertStatus, AlertLevel
 from app.models.student import Student
 from app.models.user import User
 from app.schemas.risk_alert import RiskAlert as RiskAlertSchema, RiskAlertCreate, RiskAlertUpdate
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -25,6 +29,7 @@ def get_risk_alerts(
     db: Session = Depends(get_db)
 ):
     """Get all risk alerts with optional filtering"""
+    logger.debug("Listing risk alerts", extra={"extra_data": {"school_id": str(school_id) if school_id else None, "student_id": str(student_id) if student_id else None, "level": level}})
     query = db.query(RiskAlert).options(
         joinedload(RiskAlert.student),
         joinedload(RiskAlert.assigned_user)
@@ -45,6 +50,7 @@ def get_risk_alerts(
         query = query.filter(RiskAlert.assigned_to == assigned_to)
     
     alerts = query.order_by(RiskAlert.created_at.desc()).offset(skip).limit(limit).all()
+    logger.debug(f"Found {len(alerts)} risk alerts")
     
     # Build response using eager-loaded relationships
     result = []
@@ -71,8 +77,10 @@ def get_risk_alerts(
 @router.get("/{alert_id}", response_model=RiskAlertSchema)
 def get_risk_alert(alert_id: UUID, db: Session = Depends(get_db)):
     """Get a specific risk alert by ID"""
+    logger.debug(f"Fetching risk alert: {alert_id}")
     alert = db.query(RiskAlert).filter(RiskAlert.alert_id == alert_id).first()
     if not alert:
+        logger.warning(f"Risk alert not found: {alert_id}")
         raise HTTPException(status_code=404, detail="Risk alert not found")
     return alert
 
@@ -80,18 +88,22 @@ def get_risk_alert(alert_id: UUID, db: Session = Depends(get_db)):
 @router.post("", response_model=RiskAlertSchema, status_code=201)
 def create_risk_alert(alert: RiskAlertCreate, db: Session = Depends(get_db)):
     """Create a new risk alert"""
+    logger.info("Creating risk alert", extra={"extra_data": {"student_id": str(alert.student_id) if hasattr(alert, 'student_id') else None}})
     db_alert = RiskAlert(**alert.model_dump())
     db.add(db_alert)
     db.commit()
     db.refresh(db_alert)
+    logger.info(f"Risk alert created", extra={"extra_data": {"alert_id": str(db_alert.alert_id)}})
     return db_alert
 
 
 @router.put("/{alert_id}", response_model=RiskAlertSchema)
 def update_risk_alert(alert_id: UUID, alert: RiskAlertUpdate, db: Session = Depends(get_db)):
     """Update a risk alert"""
+    logger.info(f"Updating risk alert: {alert_id}")
     db_alert = db.query(RiskAlert).filter(RiskAlert.alert_id == alert_id).first()
     if not db_alert:
+        logger.warning(f"Risk alert update failed - not found: {alert_id}")
         raise HTTPException(status_code=404, detail="Risk alert not found")
     
     for key, value in alert.model_dump(exclude_unset=True).items():
@@ -99,16 +111,20 @@ def update_risk_alert(alert_id: UUID, alert: RiskAlertUpdate, db: Session = Depe
     
     db.commit()
     db.refresh(db_alert)
+    logger.info(f"Risk alert updated", extra={"extra_data": {"alert_id": str(alert_id)}})
     return db_alert
 
 
 @router.delete("/{alert_id}", status_code=204)
 def delete_risk_alert(alert_id: UUID, db: Session = Depends(get_db)):
     """Delete a risk alert"""
+    logger.info(f"Deleting risk alert: {alert_id}")
     db_alert = db.query(RiskAlert).filter(RiskAlert.alert_id == alert_id).first()
     if not db_alert:
+        logger.warning(f"Risk alert deletion failed - not found: {alert_id}")
         raise HTTPException(status_code=404, detail="Risk alert not found")
     
     db.delete(db_alert)
     db.commit()
+    logger.info(f"Risk alert deleted", extra={"extra_data": {"alert_id": str(alert_id)}})
     return None

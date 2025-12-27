@@ -6,6 +6,7 @@ from uuid import UUID
 from datetime import datetime, date, time
 from app.core.database import get_db
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.therapist import Therapist, AvailabilityStatus
 from app.models.therapist_booking import TherapistBooking, BookingStatus
 from app.schemas.therapist import (
@@ -13,6 +14,9 @@ from app.schemas.therapist import (
     TherapistBookingCreate, TherapistBookingUpdate, TherapistBookingResponse
 )
 from app.models.user import User, UserRole
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -31,6 +35,7 @@ async def list_therapists(
     db: Session = Depends(get_db)
 ):
     """List all therapists with optional filtering"""
+    logger.debug("Listing therapists", extra={"extra_data": {"specialty": specialty, "city": city, "verified_only": verified_only}})
     query = db.query(Therapist)
     
     if specialty:
@@ -66,6 +71,7 @@ async def list_therapists(
     query = query.order_by(Therapist.rating.desc(), Therapist.review_count.desc())
     total = query.count()
     therapists = query.offset(skip).limit(limit).all()
+    logger.debug(f"Found {len(therapists)} therapists")
     
     return success_response({
         "therapists": therapists,
@@ -95,8 +101,10 @@ async def get_my_bookings(
 @router.get("/{therapist_id}")
 async def get_therapist(therapist_id: UUID, db: Session = Depends(get_db)):
     """Get a single therapist by ID"""
+    logger.debug(f"Fetching therapist: {therapist_id}")
     therapist = db.query(Therapist).filter(Therapist.therapist_id == therapist_id).first()
     if not therapist:
+        logger.warning(f"Therapist not found: {therapist_id}")
         raise HTTPException(status_code=404, detail="Therapist not found")
     
     return success_response(therapist)
@@ -104,10 +112,12 @@ async def get_therapist(therapist_id: UUID, db: Session = Depends(get_db)):
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_therapist(therapist_data: TherapistCreate, db: Session = Depends(get_db)):
     """Create a new therapist (Admin only)"""
+    logger.info(f"Creating therapist: {therapist_data.name}")
     therapist = Therapist(**therapist_data.dict())
     db.add(therapist)
     db.commit()
     db.refresh(therapist)
+    logger.info(f"Therapist created", extra={"extra_data": {"therapist_id": str(therapist.therapist_id)}})
     return success_response(therapist)
 
 @router.put("/{therapist_id}")
@@ -148,12 +158,16 @@ async def book_therapist(
     db: Session = Depends(get_db)
 ):
     """Book an appointment with a therapist"""
+    logger.info(f"Booking therapist: {therapist_id}", extra={"extra_data": {"user_id": str(user_id)}})
+    
     # Check if therapist exists
     therapist = db.query(Therapist).filter(Therapist.therapist_id == therapist_id).first()
     if not therapist:
+        logger.warning(f"Booking failed - therapist not found: {therapist_id}")
         raise HTTPException(status_code=404, detail="Therapist not found")
     
     if therapist.availability_status == AvailabilityStatus.UNAVAILABLE:
+        logger.warning(f"Booking failed - therapist unavailable: {therapist_id}")
         raise HTTPException(status_code=400, detail="Therapist is currently unavailable")
 
     # Auto-register therapist as counselor if not already registered

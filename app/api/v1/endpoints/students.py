@@ -4,19 +4,29 @@ from typing import List
 from uuid import UUID
 from app.core.database import get_db
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.student import Student
 from app.models.school import School
 from app.models.class_model import Class
 from app.models.user import User, UserRole
 from app.schemas.student import StudentCreate, StudentResponse, StudentUpdate
 
+# Initialize logger
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_student(student_data: StudentCreate, db: Session = Depends(get_db)):
+    logger.info(
+        f"Creating student: {student_data.first_name} {student_data.last_name}",
+        extra={"extra_data": {"school_id": str(student_data.school_id), "class_id": str(student_data.class_id) if student_data.class_id else None}}
+    )
+    
     # Validate school exists
     school = db.query(School).filter(School.school_id == student_data.school_id).first()
     if not school:
+        logger.warning(f"Student creation failed - school not found: {student_data.school_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="School not found"
@@ -26,6 +36,7 @@ async def create_student(student_data: StudentCreate, db: Session = Depends(get_
     if student_data.class_id:
         class_obj = db.query(Class).filter(Class.class_id == student_data.class_id).first()
         if not class_obj:
+            logger.warning(f"Student creation failed - class not found: {student_data.class_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Class not found"
@@ -98,14 +109,22 @@ async def create_student(student_data: StudentCreate, db: Session = Depends(get_
     db.add(student)
     db.commit()
     db.refresh(student)
+    
+    logger.info(
+        f"Student created successfully: {student.first_name} {student.last_name}",
+        extra={"extra_data": {"student_id": str(student.student_id), "school_id": str(student.school_id), "class_id": str(student.class_id) if student.class_id else None}}
+    )
     return success_response(student)
 
 @router.get("/{student_id}")
 async def get_student(student_id: UUID, db: Session = Depends(get_db)):
+    logger.debug(f"Fetching student: {student_id}")
+    
     student = db.query(Student).options(
         joinedload(Student.class_obj)
     ).filter(Student.student_id == student_id).first()
     if not student:
+        logger.warning(f"Student not found: {student_id}")
         raise HTTPException(status_code=404, detail="Student not found")
     
     # Enrich student data with class section information
@@ -144,6 +163,11 @@ async def get_student(student_id: UUID, db: Session = Depends(get_db)):
 
 @router.get("/")
 async def list_students(school_id: UUID, skip: int = 0, limit: int = 300, class_id: UUID = None, db: Session = Depends(get_db)):
+    logger.debug(
+        f"Listing students for school: {school_id}",
+        extra={"extra_data": {"school_id": str(school_id), "class_id": str(class_id) if class_id else None, "skip": skip, "limit": limit}}
+    )
+    
     query = db.query(Student).options(
         joinedload(Student.class_obj)
     ).filter(Student.school_id == school_id)
@@ -151,6 +175,8 @@ async def list_students(school_id: UUID, skip: int = 0, limit: int = 300, class_
         query = query.filter(Student.class_id == class_id)
     
     students = query.offset(skip).limit(limit).all()
+    
+    logger.debug(f"Found {len(students)} students")
     
     # Enrich student data with class section information
     students_data = []
@@ -192,15 +218,21 @@ async def list_students(school_id: UUID, skip: int = 0, limit: int = 300, class_
 
 @router.patch("/{student_id}")
 async def update_student(student_id: UUID, student_update: StudentUpdate, db: Session = Depends(get_db)):
+    logger.info(f"Updating student: {student_id}")
+    
     student = db.query(Student).filter(Student.student_id == student_id).first()
     if not student:
+        logger.warning(f"Student update failed - not found: {student_id}")
         raise HTTPException(status_code=404, detail="Student not found")
 
     # Validate class exists if class_id is being updated
     update_data = student_update.dict(exclude_unset=True)
+    logger.debug(f"Update fields: {list(update_data.keys())}")
+    
     if "class_id" in update_data and update_data["class_id"] is not None:
         class_obj = db.query(Class).filter(Class.class_id == update_data["class_id"]).first()
         if not class_obj:
+            logger.warning(f"Student update failed - class not found: {update_data['class_id']}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Class not found"
@@ -273,4 +305,9 @@ async def update_student(student_id: UUID, student_update: StudentUpdate, db: Se
 
     db.commit()
     db.refresh(student)
+    
+    logger.info(
+        f"Student updated successfully: {student.first_name} {student.last_name}",
+        extra={"extra_data": {"student_id": str(student_id)}}
+    )
     return success_response(student)

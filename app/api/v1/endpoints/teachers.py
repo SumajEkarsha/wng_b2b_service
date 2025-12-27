@@ -5,6 +5,7 @@ from uuid import UUID
 from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.user import User, UserRole
 from app.models.class_model import Class
 from app.models.school import School
@@ -14,6 +15,9 @@ from app.models.observation import Observation, Severity
 from app.models.assessment import Assessment
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
+# Initialize logger
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 @router.post("/")
@@ -22,8 +26,11 @@ async def create_teacher(
     db: Session = Depends(get_db)
 ):
     """Create a new teacher"""
+    logger.info(f"Creating teacher: {teacher_data.email}")
+    
     # Ensure role is teacher
     if teacher_data.role != UserRole.TEACHER:
+        logger.warning(f"Teacher creation failed - invalid role")
         raise HTTPException(
             status_code=400,
             detail="Role must be 'teacher' for this endpoint"
@@ -32,6 +39,7 @@ async def create_teacher(
     # Validate school exists
     school = db.query(School).filter(School.school_id == teacher_data.school_id).first()
     if not school:
+        logger.warning(f"Teacher creation failed - school not found: {teacher_data.school_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="School not found"
@@ -40,6 +48,7 @@ async def create_teacher(
     # Check if email already exists
     existing_user = db.query(User).filter(User.email == teacher_data.email).first()
     if existing_user:
+        logger.warning(f"Teacher creation failed - email exists: {teacher_data.email}")
         raise HTTPException(
             status_code=400,
             detail="Email already registered"
@@ -65,6 +74,7 @@ async def create_teacher(
     db.add(teacher)
     db.commit()
     db.refresh(teacher)
+    logger.info(f"Teacher created", extra={"extra_data": {"teacher_id": str(teacher.user_id)}})
     return success_response(teacher)
 
 @router.get("/")
@@ -76,6 +86,7 @@ async def list_teachers(
     db: Session = Depends(get_db)
 ):
     """List all teachers in a school"""
+    logger.debug(f"Listing teachers for school: {school_id}")
     query = db.query(User).filter(
         User.school_id == school_id,
         User.role == UserRole.TEACHER
@@ -89,6 +100,7 @@ async def list_teachers(
         )
     
     teachers = query.offset(skip).limit(limit).all()
+    logger.debug(f"Found {len(teachers)} teachers")
     return success_response(teachers)
 
 @router.get("/{teacher_id}")
@@ -169,7 +181,6 @@ async def get_teacher_dashboard(
     db: Session = Depends(get_db)
 ):
     """Get comprehensive teacher dashboard with class insights and student wellbeing"""
-    from sqlalchemy.orm import joinedload
     
     teacher = db.query(User).filter(
         User.user_id == teacher_id,

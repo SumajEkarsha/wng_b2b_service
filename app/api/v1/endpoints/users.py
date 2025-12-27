@@ -7,10 +7,14 @@ from uuid import UUID
 from app.core.database import get_db
 from app.core.security import get_password_hash
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.user import User
 from app.models.school import School
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 from app.api.dependencies import get_current_user
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -19,9 +23,15 @@ async def create_user(
     user_data: UserCreate,
     db: Session = Depends(get_db)
 ):
+    logger.info(
+        f"Creating user: {user_data.email}",
+        extra={"extra_data": {"email": user_data.email, "role": str(user_data.role), "school_id": str(user_data.school_id)}}
+    )
+    
     # Validate school exists
     school = db.query(School).filter(School.school_id == user_data.school_id).first()
     if not school:
+        logger.warning(f"User creation failed - school not found: {user_data.school_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="School not found"
@@ -29,6 +39,7 @@ async def create_user(
 
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
+        logger.warning(f"User creation failed - email already registered: {user_data.email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
@@ -52,6 +63,11 @@ async def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    
+    logger.info(
+        f"User created successfully: {user.email}",
+        extra={"extra_data": {"user_id": str(user.user_id), "email": user.email, "role": str(user.role)}}
+    )
     return success_response(user)
 
 @router.get("/")
@@ -63,6 +79,11 @@ async def list_users(
     db: Session = Depends(get_db)
 ):
     """List all users with optional filtering by school and role"""
+    logger.debug(
+        "Listing users",
+        extra={"extra_data": {"school_id": str(school_id) if school_id else None, "role": role, "skip": skip, "limit": limit}}
+    )
+    
     query = db.query(User)
 
     if school_id:
@@ -72,6 +93,7 @@ async def list_users(
         query = query.filter(User.role == role.upper())
 
     users = query.offset(skip).limit(limit).all()
+    logger.debug(f"Found {len(users)} users")
     return success_response(users)
 
 @router.get("/{user_id}")
@@ -79,8 +101,11 @@ async def get_user(
     user_id: UUID,
     db: Session = Depends(get_db)
 ):
+    logger.debug(f"Fetching user: {user_id}")
+    
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
+        logger.warning(f"User not found: {user_id}")
         raise HTTPException(status_code=404, detail="User not found")
     return success_response(user)
 
@@ -90,11 +115,15 @@ async def update_user(
     user_update: UserUpdate,
     db: Session = Depends(get_db)
 ):
+    logger.info(f"Updating user: {user_id}")
+    
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
+        logger.warning(f"User update failed - not found: {user_id}")
         raise HTTPException(status_code=404, detail="User not found")
 
     update_data = user_update.dict(exclude_unset=True)
+    logger.debug(f"Update fields: {list(update_data.keys())}")
 
     # Convert Pydantic models to dict for JSON storage
     if 'profile' in update_data and update_data['profile'] is not None:
@@ -110,6 +139,8 @@ async def update_user(
 
     db.commit()
     db.refresh(user)
+    
+    logger.info(f"User updated successfully", extra={"extra_data": {"user_id": str(user_id)}})
     return success_response(user)
 
 @router.delete("/{user_id}")
@@ -118,8 +149,11 @@ async def delete_user(
     db: Session = Depends(get_db)
 ):
     """Delete a user"""
+    logger.info(f"Deleting user: {user_id}")
+    
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
+        logger.warning(f"User deletion failed - not found: {user_id}")
         raise HTTPException(status_code=404, detail="User not found")
 
     # Check for dependencies based on role
@@ -147,6 +181,10 @@ async def delete_user(
             dependencies.append(f"{assigned_classes} assigned class(es)")
 
     if dependencies:
+        logger.warning(
+            f"User deletion blocked - has dependencies",
+            extra={"extra_data": {"user_id": str(user_id), "dependencies": dependencies}}
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Cannot delete user. They have: {', '.join(dependencies)}. Please reassign or remove these first."
@@ -154,6 +192,11 @@ async def delete_user(
 
     db.delete(user)
     db.commit()
+    
+    logger.info(
+        f"User deleted successfully",
+        extra={"extra_data": {"user_id": str(user_id), "email": user.email}}
+    )
 
     return success_response({
         "message": "User deleted successfully",
@@ -170,8 +213,14 @@ async def upload_profile_picture(
     """
     Upload a profile picture for the current user.
     """
+    logger.info(
+        f"Uploading profile picture for user: {current_user.user_id}",
+        extra={"extra_data": {"user_id": str(current_user.user_id), "filename": file.filename, "content_type": file.content_type}}
+    )
+    
     # Validate file type
     if not file.content_type.startswith("image/"):
+        logger.warning(f"Profile picture upload failed - invalid file type: {file.content_type}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid file type. Please upload an image."
@@ -191,6 +240,7 @@ async def upload_profile_picture(
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
     except Exception as e:
+        logger.error(f"Profile picture upload failed - file save error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save file: {str(e)}"
@@ -203,6 +253,11 @@ async def upload_profile_picture(
     current_user.profile_picture_url = profile_picture_url
     db.commit()
     db.refresh(current_user)
+    
+    logger.info(
+        f"Profile picture uploaded successfully",
+        extra={"extra_data": {"user_id": str(current_user.user_id), "profile_picture_url": profile_picture_url}}
+    )
 
     return success_response({
         "message": "Profile picture uploaded successfully",

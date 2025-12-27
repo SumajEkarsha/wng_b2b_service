@@ -3,11 +3,17 @@ from fastapi.responses import StreamingResponse
 import pandas as pd
 from io import BytesIO
 
+from app.core.logging_config import get_logger
+
+# Initialize logger
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 @router.get("/staff-template")
 async def download_staff_template():
     """Download Excel template for staff data upload"""
+    logger.info("Staff template download requested")
     
     # Create sample data
     data = {
@@ -36,6 +42,7 @@ async def download_staff_template():
 @router.get("/students-template")
 async def download_students_template():
     """Download Excel template for students and parents data upload"""
+    logger.info("Students template download requested")
     
     # Create sample data
     data = {
@@ -67,6 +74,7 @@ async def download_students_template():
 @router.get("/classes-template")
 async def download_classes_template():
     """Download Excel template for classes data upload"""
+    logger.info("Classes template download requested")
     
     # Create sample data
     data = {

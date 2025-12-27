@@ -51,3 +51,10 @@ class Activity(ActivityBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ActivityWithFlashcards(Activity):
+    """Activity schema with optional flashcards from S3."""
+    flashcards: Optional[dict] = None
+    is_counselor_only: Optional[bool] = False
+

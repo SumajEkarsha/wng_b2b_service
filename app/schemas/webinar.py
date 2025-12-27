@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, UUID4
 from typing import Optional, List
-from datetime import datetime, date, time
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 

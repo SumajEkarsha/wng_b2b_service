@@ -4,12 +4,16 @@ from typing import List
 from uuid import UUID
 
 from app.api.dependencies import get_db
+from app.core.logging_config import get_logger
 from app.models.ai_recommendation import AIRecommendation
 from app.schemas.ai_recommendation import (
     AIRecommendation as AIRecommendationSchema,
     AIRecommendationCreate,
     AIRecommendationUpdate
 )
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 

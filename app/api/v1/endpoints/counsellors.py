@@ -4,10 +4,14 @@ from typing import List, Optional
 from uuid import UUID
 from app.core.database import get_db
 from app.core.response import success_response
+from app.core.logging_config import get_logger
 from app.models.user import User, UserRole
 from app.models.case import Case
 from app.models.school import School
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -17,8 +21,11 @@ async def create_counsellor(
     db: Session = Depends(get_db)
 ):
     """Create a new counsellor"""
+    logger.info(f"Creating counsellor: {counsellor_data.email}")
+    
     # Ensure role is counsellor
     if counsellor_data.role != UserRole.COUNSELLOR:
+        logger.warning(f"Counsellor creation failed - invalid role")
         raise HTTPException(
             status_code=400,
             detail="Role must be 'counsellor' for this endpoint"
@@ -27,6 +34,7 @@ async def create_counsellor(
     # Validate school exists
     school = db.query(School).filter(School.school_id == counsellor_data.school_id).first()
     if not school:
+        logger.warning(f"Counsellor creation failed - school not found: {counsellor_data.school_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="School not found"
@@ -35,6 +43,7 @@ async def create_counsellor(
     # Check if email already exists
     existing_user = db.query(User).filter(User.email == counsellor_data.email).first()
     if existing_user:
+        logger.warning(f"Counsellor creation failed - email exists: {counsellor_data.email}")
         raise HTTPException(
             status_code=400,
             detail="Email already registered"
@@ -60,6 +69,7 @@ async def create_counsellor(
     db.add(counsellor)
     db.commit()
     db.refresh(counsellor)
+    logger.info(f"Counsellor created", extra={"extra_data": {"counsellor_id": str(counsellor.user_id)}})
     return success_response(counsellor)
 
 @router.get("")
@@ -71,6 +81,7 @@ async def list_counsellors(
     db: Session = Depends(get_db)
 ):
     """List all counsellors in a school"""
+    logger.debug(f"Listing counsellors for school: {school_id}")
     query = db.query(User).filter(
         User.school_id == school_id,
         User.role == UserRole.COUNSELLOR
@@ -83,6 +94,7 @@ async def list_counsellors(
         )
 
     counsellors = query.offset(skip).limit(limit).all()
+    logger.debug(f"Found {len(counsellors)} counsellors")
     return success_response(counsellors)
 
 @router.get("/{counsellor_id}")

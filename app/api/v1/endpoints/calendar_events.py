@@ -6,6 +6,7 @@ from uuid import UUID
 from datetime import datetime
 
 from app.api.dependencies import get_db, get_current_user
+from app.core.logging_config import get_logger
 from app.models.calendar_event import CalendarEvent, EventStatus
 from app.models.user import User
 from app.schemas.calendar_event import (
@@ -13,6 +14,9 @@ from app.schemas.calendar_event import (
     CalendarEventCreate,
     CalendarEventUpdate
 )
+
+# Initialize logger
+logger = get_logger(__name__)
 
 router = APIRouter()
 
